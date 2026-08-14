@@ -1,11 +1,34 @@
 {
-  "name": "dsh-desktop",
+  "name": "dsh-desktop-windows",
   "productName": "DeepSeek Harness Desktop",
-  "version": "0.1.0",
-  "description": "Electron shell for DeepSeek Harness (dsh web)",
+  "version": "0.1.2",
+  "description": "Electron desktop shell for DeepSeek Harness (dsh web) on Windows — double-click to run the harness in a standalone window, no terminal needed",
   "main": "src/main.js",
-  "private": true,
   "license": "MIT",
+  "author": "ReachGa0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ReachGa0/dsh-desktop.git"
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "electron",
+    "desktop",
+    "windows"
+  ],
+  "files": [
+    "src",
+    "assets",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win nsis",
