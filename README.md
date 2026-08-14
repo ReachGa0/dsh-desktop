@@ -1,5 +1,7 @@
 # dsh-desktop
 
+[中文](README.md) | [English](README.en.md)
+
 DeepSeek Harness 的 Electron 桌面壳：打开一个独立窗口运行 `dsh web`，不用每次开终端、敲命令、再切浏览器。
 
 纯壳，**不改动 dsh 本身**。服务端复用全局安装的 `@deepseek-ai/dsh`。
