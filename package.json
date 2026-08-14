@@ -1,8 +1,8 @@
 {
   "name": "dsh-desktop-windows",
   "productName": "DeepSeek Harness Desktop",
-  "version": "0.1.2",
-  "description": "Electron desktop shell for DeepSeek Harness (dsh web) on Windows — double-click to run the harness in a standalone window, no terminal needed",
+  "version": "0.1.3",
+  "description": "DeepSeek Harness 桌面版（Windows）· Electron desktop shell for DeepSeek Harness (dsh web) — 双击即用，无需终端 / double-click to run the harness in a standalone window",
   "main": "src/main.js",
   "license": "MIT",
   "author": "ReachGa0",

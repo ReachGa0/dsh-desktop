@@ -8,6 +8,8 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)]()
 [![Build](https://github.com/ReachGa0/dsh-desktop/actions/workflows/build.yml/badge.svg)](https://github.com/ReachGa0/dsh-desktop/actions)
 
+> **English summary** · An [Electron](https://www.electronjs.org/) desktop shell for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh web) on **Windows** — double-click to run the harness in a standalone window. No terminal, no commands, no browser juggling. System tray support, floating reload button, configurable port. Full English docs: [README.en.md](README.en.md)
+
 DeepSeek Harness 的 **Electron 桌面壳**：双击图标，一个独立窗口运行 `dsh web` —— 不用开终端、不用敲命令、不用切浏览器。
 
 纯壳，**不改动 dsh 本身**。服务端复用全局安装的 `@deepseek-ai/dsh`。
