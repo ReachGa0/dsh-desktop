@@ -39,6 +39,7 @@ let mainWindow = null
 let ownedDsh = null // 本壳启动的 dsh 子进程；null 表示复用了外部已有服务
 let tray = null // 系统托盘
 let isQuitting = false // 用户从托盘选择退出时置 true，放行窗口关闭
+let setupWindow = null // 首次环境引导窗口
 
 /* ------------------------------------------------------------------ *
  * 工具：日志
@@ -136,6 +137,106 @@ async function shutdownOwnedDsh() {
     await killProcessTree(pid)
     log(`killed owned dsh pid ${pid}`)
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * 环境检测与首次引导
+ * ------------------------------------------------------------------ */
+
+/** 执行一条命令并收集输出（Windows 下经 shell 运行，参数均为常量）。 */
+function runCmd(cmd, args) {
+  return new Promise((resolve) => {
+    const full = args.length ? `"${cmd}" ${args.join(' ')}` : `"${cmd}"`
+    const child = spawn(full, { shell: true, windowsHide: true })
+    let out = ''
+    child.stdout.on('data', (d) => (out += d.toString()))
+    child.stderr.on('data', (d) => (out += d.toString()))
+    child.on('error', () => resolve(null))
+    child.on('close', (code) => resolve({ code, out: out.trim() }))
+  })
+}
+
+/** 检测 Node.js 与 dsh 是否可用。 */
+async function checkEnvironment() {
+  const node = await runCmd('node', ['--version'])
+  const dshBin = resolveDshBin()
+  const dsh = await runCmd(dshBin, ['--version'])
+  return {
+    node:
+      node && node.code === 0
+        ? { ok: true, version: node.out.replace(/^v/i, '') }
+        : { ok: false, error: '未检测到 Node.js，请先安装（≥ 22）' },
+    dsh:
+      dsh && dsh.code === 0
+        ? { ok: true, version: (dsh.out.split('\n')[0] || 'dsh').trim() }
+        : { ok: false, error: `未检测到 dsh（${dshBin}），点击右侧按钮自动安装` },
+  }
+}
+
+/** 自动安装 dsh（npm 全局安装），输出流式回传引导窗口。 */
+function installDsh() {
+  return new Promise((resolve) => {
+    const child = spawn('npm.cmd', ['i', '-g', '@deepseek-ai/dsh'], { shell: true, windowsHide: true })
+    const send = (line) => {
+      if (setupWindow && !setupWindow.isDestroyed()) {
+        setupWindow.webContents.send('setup:install-log', line)
+      }
+    }
+    child.stdout.on('data', (d) => send(d.toString().trim()))
+    child.stderr.on('data', (d) => send(d.toString().trim()))
+    child.on('error', (e) => resolve({ ok: false, error: e.message }))
+    child.on('close', (code) =>
+      resolve(code === 0 ? { ok: true } : { ok: false, error: `npm 退出码 ${code}` })
+    )
+  })
+}
+
+/** 打开首次环境引导窗口；resolve('ready')=环境就绪，resolve('closed')=用户关闭。 */
+function startSetupFlow() {
+  return new Promise((resolve) => {
+    setupWindow = new BrowserWindow({
+      width: 580,
+      height: 660,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      title: 'DeepSeek Harness 环境设置',
+      autoHideMenuBar: true,
+      icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        preload: path.join(__dirname, 'setup-preload.js'),
+      },
+    })
+    setupWindow.setMenuBarVisibility(false)
+    setupWindow.loadFile(path.join(__dirname, 'setup.html'))
+    setupWindow.on('closed', () => {
+      setupWindow = null
+      resolve('closed')
+    })
+
+    ipcMain.removeHandler('setup:check')
+    ipcMain.removeHandler('setup:install-dsh')
+    ipcMain.removeHandler('setup:open-node')
+    ipcMain.removeHandler('setup:open-settings')
+    ipcMain.removeHandler('setup:finish')
+
+    ipcMain.handle('setup:check', () => checkEnvironment())
+    ipcMain.handle('setup:install-dsh', () => installDsh())
+    ipcMain.handle('setup:open-node', () => shell.openExternal('https://nodejs.org'))
+    ipcMain.handle('setup:open-settings', () => shell.openExternal('https://platform.deepseek.com'))
+    ipcMain.handle('setup:finish', async () => {
+      const env = await checkEnvironment()
+      if (env.node.ok && env.dsh.ok) {
+        if (setupWindow && !setupWindow.isDestroyed()) setupWindow.destroy()
+        resolve('ready')
+        return { ok: true }
+      }
+      return { ok: false, env }
+    })
+  })
 }
 
 /* ------------------------------------------------------------------ *
@@ -294,6 +395,22 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
+    // 0) 环境检查：Node / dsh 缺失时先走引导窗口
+    let env = await checkEnvironment()
+    if (!env.node.ok || !env.dsh.ok) {
+      const result = await startSetupFlow()
+      if (result !== 'ready') {
+        // 用户关闭引导窗口 → 退出
+        app.quit()
+        return
+      }
+      env = await checkEnvironment()
+      if (!env.node.ok || !env.dsh.ok) {
+        app.quit()
+        return
+      }
+    }
+
     // 1) 已有服务（可能是用户手动起的 dsh web）→ 直接复用
     let port = resolvePort()
     let external = await probe(port)

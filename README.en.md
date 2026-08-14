@@ -16,6 +16,7 @@ Pure shell — it **does not modify dsh itself**. The server reuses your globall
 
 - 🪟 **Standalone window**: native desktop window loading the Harness Web UI
 - 🍱 **System tray**: closing the window minimizes to the tray; right-click to show or quit
+- 🧭 **Auto environment setup**: on first launch it detects Node.js / dsh and guides a one-click install — friendly to non-technical users
 - 🧠 **Smart reuse**: reuses an already-running dsh service instead of starting a duplicate
 - 🧹 **Clean shutdown**: only kills the dsh process tree it started — never an external service
 - 🔒 **Single instance**: prevents double-launch conflicts
