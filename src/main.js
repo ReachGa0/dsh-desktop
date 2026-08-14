@@ -163,6 +163,13 @@ function createWindow(url) {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+  // F5 刷新（Ctrl+R 由应用菜单 accelerator 提供）
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F5') {
+      event.preventDefault()
+      mainWindow.webContents.reload()
+    }
+  })
   // 关窗口 → 最小化到托盘（不退出应用）；从托盘菜单选"退出"才真正退出
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -221,6 +228,57 @@ function showMainWindow() {
 }
 
 /* ------------------------------------------------------------------ *
+ * 应用菜单（autoHideMenuBar 下按 Alt 显示；快捷键始终生效）
+ * ------------------------------------------------------------------ */
+
+function createApplicationMenu() {
+  const template = [
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '退出',
+          accelerator: 'Alt+F4',
+          click: () => {
+            isQuitting = true
+            app.quit()
+          },
+        },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        {
+          label: '重新加载',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.reload()
+          },
+        },
+        {
+          label: '强制重新加载（清缓存）',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.reloadIgnoringCache()
+          },
+        },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '全屏' },
+        {
+          label: '开发者工具',
+          accelerator: 'F12',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.toggleDevTools()
+          },
+        },
+      ],
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+/* ------------------------------------------------------------------ *
  * 应用生命周期
  * ------------------------------------------------------------------ */
 
@@ -260,6 +318,7 @@ if (!gotLock) {
 
     createWindow(`http://127.0.0.1:${port}`)
     createTray()
+    createApplicationMenu()
     if (external) log('reusing external dsh service on port ' + port)
   })
 
