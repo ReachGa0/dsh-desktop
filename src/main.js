@@ -13,7 +13,7 @@
  * 不修改 dsh 任何代码；服务端用全局安装的 dsh（可用 DSH_BIN 环境变量覆盖路径）。
  */
 
-const { app, BrowserWindow, dialog } = require('electron')
+const { app, BrowserWindow, dialog, shell } = require('electron')
 const { spawn, execFile } = require('node:child_process')
 const http = require('node:http')
 const fs = require('node:fs')
@@ -23,6 +23,17 @@ const DEFAULT_PORT = 3080
 const START_TIMEOUT_MS = 90_000
 const POLL_INTERVAL_MS = 500
 const LOG_PREFIX = '[dsh-desktop]'
+
+/** 解析端口：优先命令行 --port <n>，否则用默认值。 */
+function resolvePort() {
+  const idx = process.argv.indexOf('--port')
+  if (idx !== -1 && process.argv[idx + 1]) {
+    const n = Number(process.argv[idx + 1])
+    if (Number.isInteger(n) && n > 0 && n < 65536) return n
+    console.warn(LOG_PREFIX, `invalid --port value "${process.argv[idx + 1]}", fallback to ${DEFAULT_PORT}`)
+  }
+  return DEFAULT_PORT
+}
 
 let mainWindow = null
 let ownedDsh = null // 本壳启动的 dsh 子进程；null 表示复用了外部已有服务
@@ -155,14 +166,14 @@ function createWindow(url) {
     if (target.startsWith('http://127.0.0.1') || target.startsWith('http://localhost')) {
       return { action: 'allow' }
     }
-    require('electron').shell.openExternal(target)
+    shell.openExternal(target)
     return { action: 'deny' }
   })
 
   mainWindow.webContents.on('will-navigate', (event, target) => {
     if (!target.startsWith(url)) {
       event.preventDefault()
-      require('electron').shell.openExternal(target)
+      shell.openExternal(target)
     }
   })
 }
@@ -184,7 +195,7 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     // 1) 已有服务（可能是用户手动起的 dsh web）→ 直接复用
-    let port = DEFAULT_PORT
+    let port = resolvePort()
     let external = await probe(port)
     if (!external) {
       // 2) 没有 → 自己启动，等就绪
@@ -196,7 +207,8 @@ if (!gotLock) {
           'DeepSeek Harness 启动失败',
           `dsh web 在 ${START_TIMEOUT_MS / 1000}s 内没有就绪。\n\n` +
             `日志文件：${logFile}\n\n` +
-            '请确认已全局安装 dsh（npm i -g @deepseek-ai/dsh），或用 DSH_BIN 指定路径。'
+            '请确认已全局安装 dsh（npm i -g @deepseek-ai/dsh），或用 DSH_BIN 指定路径。\n' +
+            `若端口 ${port} 被其他程序占用，可换端口启动：dsh-desktop --port <新端口>`
         )
         await shutdownOwnedDsh()
         app.quit()

@@ -2,9 +2,23 @@
 
 [English](README.en.md) | [中文](README.md)
 
-An Electron desktop shell for **DeepSeek Harness**: open a standalone window that runs `dsh web` — no terminal, no manual commands, no browser tab juggling.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Electron](https://img.shields.io/badge/Electron-43-blue)](https://www.electronjs.org/)
+[![dsh](https://img.shields.io/badge/dsh-0.1.0--rc.6-purple)](https://github.com/deepseek-ai/deepseek-harness)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)]()
+
+An **Electron desktop shell** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): double-click an icon and get a standalone window running `dsh web` — no terminal, no manual commands, no browser tab juggling.
 
 Pure shell — it **does not modify dsh itself**. The server reuses your globally installed `@deepseek-ai/dsh`.
+
+## ✨ Features
+
+- 🪟 **Standalone window**: native desktop window loading the Harness Web UI
+- 🧠 **Smart reuse**: reuses an already-running dsh service instead of starting a duplicate
+- 🧹 **Clean shutdown**: only kills the dsh process tree it started — never an external service
+- 🔒 **Single instance**: prevents double-launch conflicts
+- 🎨 **Hardened**: `contextIsolation` + `sandbox` + no Node integration; external links open in your system browser
+- 📦 **One-click installer**: `npm run dist` produces an NSIS setup
 
 ## How it works
 
@@ -15,7 +29,7 @@ Pure shell — it **does not modify dsh itself**. The server reuses your globall
 
 ## Prerequisites
 
-- Node.js ≥ 22 (v24 verified on our dev machine)
+- Node.js ≥ 22 (v24 verified)
 - Globally installed dsh: `npm i -g @deepseek-ai/dsh` (0.1.0-rc.6 verified)
 - To override the dsh binary path, set the `DSH_BIN` environment variable (e.g. point it at a source build of `apps/cli/src/bin.ts`)
 
@@ -33,7 +47,17 @@ npm start
 > npm install
 > ```
 
+**Use a different port** (when 3080 is taken):
+
+```sh
+npm start -- --port 3081
+```
+
 On first launch: go to **Settings → Models**, enter your DeepSeek API Key, then pick a workspace.
+
+## Screenshots
+
+> Coming soon — feel free to submit a screenshot via PR or Issue.
 
 ## Package an installer
 
@@ -48,5 +72,13 @@ Custom icon: drop an `assets/icon.ico` (≥256×256) and add `"icon": "assets/ic
 ## Troubleshooting
 
 - **Launch fails / error dialog**: check `%APPDATA%/DeepSeek Harness Desktop/dsh.log`; make sure `dsh --version` works.
-- **Port already in use**: the shell currently fixes port 3080 (dsh's default). You can change `DEFAULT_PORT` in `src/main.js`.
+- **Port already in use**: run `npm start -- --port <new-port>` instead.
 - **After upgrading dsh**: just re-run `npm i -g @deepseek-ai/dsh` — the shell needs no changes.
+
+## Contributing
+
+Issues and PRs are welcome! The project is tiny — all the code lives in `src/`.
+
+## License
+
+[MIT](LICENSE)
