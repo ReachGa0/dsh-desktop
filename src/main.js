@@ -13,7 +13,7 @@
  * 不修改 dsh 任何代码；服务端用全局安装的 dsh（可用 DSH_BIN 环境变量覆盖路径）。
  */
 
-const { app, BrowserWindow, dialog, shell, Tray, Menu, nativeImage } = require('electron')
+const { app, BrowserWindow, dialog, shell, Tray, Menu, nativeImage, ipcMain } = require('electron')
 const { spawn, execFile } = require('node:child_process')
 const http = require('node:http')
 const fs = require('node:fs')
@@ -319,6 +319,10 @@ if (!gotLock) {
     createWindow(`http://127.0.0.1:${port}`)
     createTray()
     createApplicationMenu()
+    // preload 注入的悬浮刷新按钮 → 重新加载页面
+    ipcMain.on('dsh-desktop:reload', () => {
+      if (mainWindow) mainWindow.webContents.reload()
+    })
     if (external) log('reusing external dsh service on port ' + port)
   })
 
