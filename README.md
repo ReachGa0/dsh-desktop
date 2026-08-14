@@ -6,6 +6,7 @@
 [![Electron](https://img.shields.io/badge/Electron-43-blue)](https://www.electronjs.org/)
 [![dsh](https://img.shields.io/badge/dsh-0.1.0--rc.6-purple)](https://github.com/deepseek-ai/deepseek-harness)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)]()
+[![Build](https://github.com/ReachGa0/dsh-desktop/actions/workflows/build.yml/badge.svg)](https://github.com/ReachGa0/dsh-desktop/actions)
 
 DeepSeek Harness 的 **Electron 桌面壳**：双击图标，一个独立窗口运行 `dsh web` —— 不用开终端、不用敲命令、不用切浏览器。
 
@@ -14,6 +15,7 @@ DeepSeek Harness 的 **Electron 桌面壳**：双击图标，一个独立窗口�
 ## ✨ 特性
 
 - 🪟 **独立窗口**：原生桌面窗口加载 Harness Web UI，可最小化到任务栏
+- 🍱 **系统托盘**：关窗口最小化到托盘常驻，右键菜单可随时显示/退出
 - 🧠 **智能复用**：检测到已有的 dsh 服务就直接复用，不重复启动
 - 🧹 **干净退出**：关窗口只杀自己启动的 dsh 进程，绝不误杀外部服务
 - 🔒 **单实例锁**：防止双开冲突

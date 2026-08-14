@@ -29,7 +29,8 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "dsh-desktop-${version}-setup.${ext}"
+      "artifactName": "dsh-desktop-${version}-setup.${ext}",
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,

@@ -6,6 +6,7 @@
 [![Electron](https://img.shields.io/badge/Electron-43-blue)](https://www.electronjs.org/)
 [![dsh](https://img.shields.io/badge/dsh-0.1.0--rc.6-purple)](https://github.com/deepseek-ai/deepseek-harness)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)]()
+[![Build](https://github.com/ReachGa0/dsh-desktop/actions/workflows/build.yml/badge.svg)](https://github.com/ReachGa0/dsh-desktop/actions)
 
 An **Electron desktop shell** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): double-click an icon and get a standalone window running `dsh web` — no terminal, no manual commands, no browser tab juggling.
 
@@ -14,6 +15,7 @@ Pure shell — it **does not modify dsh itself**. The server reuses your globall
 ## ✨ Features
 
 - 🪟 **Standalone window**: native desktop window loading the Harness Web UI
+- 🍱 **System tray**: closing the window minimizes to the tray; right-click to show or quit
 - 🧠 **Smart reuse**: reuses an already-running dsh service instead of starting a duplicate
 - 🧹 **Clean shutdown**: only kills the dsh process tree it started — never an external service
 - 🔒 **Single instance**: prevents double-launch conflicts

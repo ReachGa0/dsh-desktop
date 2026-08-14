@@ -13,7 +13,7 @@
  * 不修改 dsh 任何代码；服务端用全局安装的 dsh（可用 DSH_BIN 环境变量覆盖路径）。
  */
 
-const { app, BrowserWindow, dialog, shell } = require('electron')
+const { app, BrowserWindow, dialog, shell, Tray, Menu, nativeImage } = require('electron')
 const { spawn, execFile } = require('node:child_process')
 const http = require('node:http')
 const fs = require('node:fs')
@@ -37,6 +37,8 @@ function resolvePort() {
 
 let mainWindow = null
 let ownedDsh = null // 本壳启动的 dsh 子进程；null 表示复用了外部已有服务
+let tray = null // 系统托盘
+let isQuitting = false // 用户从托盘选择退出时置 true，放行窗口关闭
 
 /* ------------------------------------------------------------------ *
  * 工具：日志
@@ -148,6 +150,7 @@ function createWindow(url) {
     minHeight: 600,
     title: 'DeepSeek Harness',
     autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -159,6 +162,14 @@ function createWindow(url) {
   mainWindow.loadURL(url)
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+  // 关窗口 → 最小化到托盘（不退出应用）；从托盘菜单选"退出"才真正退出
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      mainWindow.hide()
+      log('window hidden to tray')
+    }
   })
 
   // 外部链接（非本机）用系统浏览器打开，不在壳内导航
@@ -176,6 +187,37 @@ function createWindow(url) {
       shell.openExternal(target)
     }
   })
+}
+
+/* ------------------------------------------------------------------ *
+ * 系统托盘
+ * ------------------------------------------------------------------ */
+
+function createTray() {
+  const iconPath = path.join(__dirname, '..', 'assets', 'tray.png')
+  const icon = nativeImage.createFromPath(iconPath)
+  tray = new Tray(icon)
+  tray.setToolTip('DeepSeek Harness')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: '显示主窗口', click: showMainWindow },
+      { type: 'separator' },
+      {
+        label: '退出',
+        click: () => {
+          isQuitting = true
+          app.quit()
+        },
+      },
+    ])
+  )
+  tray.on('double-click', showMainWindow)
+}
+
+function showMainWindow() {
+  if (!mainWindow) return
+  mainWindow.show()
+  mainWindow.focus()
 }
 
 /* ------------------------------------------------------------------ *
@@ -217,12 +259,15 @@ if (!gotLock) {
     }
 
     createWindow(`http://127.0.0.1:${port}`)
+    createTray()
     if (external) log('reusing external dsh service on port ' + port)
   })
 
-  // 窗口全关（含 macOS 之外平台）→ 清理并退出
+  // 托盘常驻：窗口关闭不退出应用；只有用户从托盘选"退出"才真正退出
   app.on('window-all-closed', () => {
-    shutdownOwnedDsh().finally(() => app.quit())
+    if (isQuitting) {
+      shutdownOwnedDsh().finally(() => app.quit())
+    }
   })
 
   app.on('before-quit', (event) => {
