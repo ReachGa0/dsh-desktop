@@ -1,0 +1,8 @@
+node_modules/
+release/
+dist/
+*.log
+
+# 误拷贝的系统目录，绝不入库
+%SystemDrive%/
+NVIDIA Corporation/

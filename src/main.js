@@ -1,0 +1,223 @@
+'use strict'
+
+/**
+ * dsh-desktop — Electron 壳，包装 DeepSeek Harness Web UI。
+ *
+ * 职责：
+ *   1. 探测 127.0.0.1:3080 是否已有 dsh 服务在跑；
+ *   2. 没有则启动全局 `dsh web --port 3080`（日志写入 userData/dsh.log）；
+ *   3. 等服务就绪后打开 BrowserWindow 加载 Web UI；
+ *   4. 窗口退出时，只杀掉由本壳启动的 dsh 进程树；
+ *   5. 单实例锁，防止双开。
+ *
+ * 不修改 dsh 任何代码；服务端用全局安装的 dsh（可用 DSH_BIN 环境变量覆盖路径）。
+ */
+
+const { app, BrowserWindow, dialog } = require('electron')
+const { spawn, execFile } = require('node:child_process')
+const http = require('node:http')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const DEFAULT_PORT = 3080
+const START_TIMEOUT_MS = 90_000
+const POLL_INTERVAL_MS = 500
+const LOG_PREFIX = '[dsh-desktop]'
+
+let mainWindow = null
+let ownedDsh = null // 本壳启动的 dsh 子进程；null 表示复用了外部已有服务
+
+/* ------------------------------------------------------------------ *
+ * 工具：日志
+ * ------------------------------------------------------------------ */
+
+function log(...args) {
+  console.log(LOG_PREFIX, ...args)
+}
+
+/* ------------------------------------------------------------------ *
+ * 工具：探测 / 等待 HTTP 服务
+ * ------------------------------------------------------------------ */
+
+function probe(port, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: '127.0.0.1', port, path: '/', timeout: timeoutMs },
+      (res) => {
+        res.resume()
+        resolve(true)
+      }
+    )
+    req.on('timeout', () => req.destroy())
+    req.on('error', () => resolve(false))
+  })
+}
+
+/** 轮询直到服务就绪或超时。 */
+async function waitForServer(port, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await probe(port)) return true
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+  }
+  return false
+}
+
+/* ------------------------------------------------------------------ *
+ * dsh 服务进程管理
+ * ------------------------------------------------------------------ */
+
+/** 解析 dsh 可执行文件：优先 DSH_BIN，否则走 PATH（Windows 下是 dsh.cmd）。 */
+function resolveDshBin() {
+  if (process.env.DSH_BIN) return process.env.DSH_BIN
+  // 全局 npm 安装的常见位置
+  if (process.env.APPDATA) {
+    const global = path.join(process.env.APPDATA, 'npm', 'dsh.cmd')
+    if (fs.existsSync(global)) return global
+  }
+  return 'dsh.cmd'
+}
+
+/** 启动 dsh web，日志追加到 userData/dsh.log。返回子进程。 */
+function startDsh(port) {
+  const bin = resolveDshBin()
+  const logFile = path.join(app.getPath('userData'), 'dsh.log')
+  const out = fs.openSync(logFile, 'a')
+  // shell:true 时把参数拼进命令字符串（参数均为常量），避免 DEP0190 警告
+  const cmd = `"${bin}" web --port ${port}`
+  const child = spawn(cmd, {
+    shell: true,
+    windowsHide: true,
+    stdio: ['ignore', out, out],
+    env: { ...process.env },
+  })
+  log(`spawned dsh: ${cmd} (pid ${child.pid})`)
+  log(`dsh log: ${logFile}`)
+  child.on('exit', (code, signal) => {
+    log(`dsh exited: code=${code} signal=${signal}`)
+    if (ownedDsh === child) ownedDsh = null
+  })
+  child.on('error', (err) => {
+    log(`dsh spawn error: ${err.message}`)
+  })
+  return child
+}
+
+/** 杀掉进程树（Windows 用 taskkill /T 覆盖子孙进程），带超时兜底。 */
+function killProcessTree(pid) {
+  return new Promise((resolve) => {
+    execFile(
+      'taskkill',
+      ['/pid', String(pid), '/T', '/F'],
+      { windowsHide: true },
+      () => resolve() // 无论成败都继续退出流程
+    )
+    setTimeout(resolve, 2000)
+  })
+}
+
+async function shutdownOwnedDsh() {
+  if (ownedDsh && ownedDsh.pid) {
+    const pid = ownedDsh.pid
+    ownedDsh = null
+    await killProcessTree(pid)
+    log(`killed owned dsh pid ${pid}`)
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 窗口
+ * ------------------------------------------------------------------ */
+
+function createWindow(url) {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 840,
+    minWidth: 960,
+    minHeight: 600,
+    title: 'DeepSeek Harness',
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  })
+
+  mainWindow.loadURL(url)
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+
+  // 外部链接（非本机）用系统浏览器打开，不在壳内导航
+  mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (target.startsWith('http://127.0.0.1') || target.startsWith('http://localhost')) {
+      return { action: 'allow' }
+    }
+    require('electron').shell.openExternal(target)
+    return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, target) => {
+    if (!target.startsWith(url)) {
+      event.preventDefault()
+      require('electron').shell.openExternal(target)
+    }
+  })
+}
+
+/* ------------------------------------------------------------------ *
+ * 应用生命周期
+ * ------------------------------------------------------------------ */
+
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
+
+  app.whenReady().then(async () => {
+    // 1) 已有服务（可能是用户手动起的 dsh web）→ 直接复用
+    let port = DEFAULT_PORT
+    let external = await probe(port)
+    if (!external) {
+      // 2) 没有 → 自己启动，等就绪
+      ownedDsh = startDsh(port)
+      const ready = await waitForServer(port, START_TIMEOUT_MS)
+      if (!ready) {
+        const logFile = path.join(app.getPath('userData'), 'dsh.log')
+        dialog.showErrorBox(
+          'DeepSeek Harness 启动失败',
+          `dsh web 在 ${START_TIMEOUT_MS / 1000}s 内没有就绪。\n\n` +
+            `日志文件：${logFile}\n\n` +
+            '请确认已全局安装 dsh（npm i -g @deepseek-ai/dsh），或用 DSH_BIN 指定路径。'
+        )
+        await shutdownOwnedDsh()
+        app.quit()
+        return
+      }
+    }
+
+    createWindow(`http://127.0.0.1:${port}`)
+    if (external) log('reusing external dsh service on port ' + port)
+  })
+
+  // 窗口全关（含 macOS 之外平台）→ 清理并退出
+  app.on('window-all-closed', () => {
+    shutdownOwnedDsh().finally(() => app.quit())
+  })
+
+  app.on('before-quit', (event) => {
+    // 防止退出竞态：先杀掉子进程再放行
+    if (ownedDsh) {
+      event.preventDefault()
+      shutdownOwnedDsh().finally(() => app.quit())
+    }
+  })
+}
