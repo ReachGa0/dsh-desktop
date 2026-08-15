@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>会话管理</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: #0f172a; color: #e2e8f0;
+    min-height: 100vh; padding: 20px;
+  }
+  h1 { font-size: 18px; margin-bottom: 6px; }
+  .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
+  .warn { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 16px; line-height: 1.6; }
+  .item {
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 10px;
+  }
+  .item .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .item .title { font-weight: 600; font-size: 13px; word-break: break-all; }
+  .item .meta { font-size: 11px; color: #64748b; margin-top: 6px; line-height: 1.5; word-break: break-all; }
+  .item .current { display: inline-block; background: #14532d; color: #86efac; font-size: 10px; border-radius: 4px; padding: 2px 6px; margin-left: 6px; }
+  .btn {
+    border: none; border-radius: 8px; padding: 7px 14px;
+    font-size: 12px; cursor: pointer; font-weight: 600; white-space: nowrap;
+    background: #dc2626; color: #fff; transition: background .2s;
+  }
+  .btn:hover { background: #b91c1c; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .empty { text-align: center; color: #64748b; padding: 40px 0; font-size: 13px; }
+  .footer { margin-top: 14px; font-size: 12px; color: #64748b; line-height: 1.6; }
+  .count { color: #7dd3fc; }
+</style>
+</head>
+<body>
+  <h1>🗂️ 会话管理</h1>
+  <div class="subtitle">这里列出了本机保存的所有会话。删除会话将<span style="color:#f87171">永久删除</span>该对话的聊天记录（不可恢复）。</div>
+  <div class="warn">⚠️ 请勿删除<b>当前正在使用的会话</b>（会导致当前对话异常）。删除后建议刷新主窗口（Ctrl+Shift+R）让列表更新。</div>
+  <div id="list"></div>
+  <div class="footer" id="footer"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id)
+  const listEl = $('list')
+  const footerEl = $('footer')
+
+  function fmtTime(ms) {
+    const d = new Date(ms)
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+
+  function fmtSize(kb) {
+    return kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB'
+  }
+
+  async function refresh() {
+    const sessions = await window.sessionsAPI.list()
+    footerEl.innerHTML = `共 <span class="count">${sessions.length}</span> 个会话`
+    if (sessions.length === 0) {
+      listEl.innerHTML = '<div class="empty">没有找到会话记录</div>'
+      return
+    }
+    listEl.innerHTML = ''
+    sessions.forEach((s) => {
+      const item = document.createElement('div')
+      item.className = 'item'
+      const head = document.createElement('div')
+      head.className = 'head'
+      const title = document.createElement('div')
+      title.className = 'title'
+      title.textContent = s.workspace
+      if (s.current) {
+        const tag = document.createElement('span')
+        tag.className = 'current'
+        tag.textContent = '当前'
+        title.appendChild(tag)
+      }
+      const delBtn = document.createElement('button')
+      delBtn.className = 'btn'
+      delBtn.textContent = '删除'
+      delBtn.onclick = async () => {
+        if (!confirm(`确定永久删除此会话？\n\n${s.id}\n\n此操作不可恢复！`)) return
+        delBtn.disabled = true
+        delBtn.textContent = '删除中…'
+        const r = await window.sessionsAPI.remove(s.id)
+        if (r && r.ok) {
+          item.remove()
+        } else {
+          alert('删除失败：' + (r ? r.error : '未知错误'))
+          delBtn.disabled = false
+          delBtn.textContent = '删除'
+        }
+      }
+      head.appendChild(title)
+      head.appendChild(delBtn)
+      const meta = document.createElement('div')
+      meta.className = 'meta'
+      meta.textContent = `ID: ${s.id} ｜ 最后活跃: ${fmtTime(s.modified)} ｜ 大小: ${fmtSize(s.sizeKB)}`
+      item.appendChild(head)
+      item.appendChild(meta)
+      listEl.appendChild(item)
+    })
+  }
+
+  refresh()
+</script>
+</body>
+</html>

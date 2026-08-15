@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop-windows",
   "productName": "DeepSeek Harness Desktop",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "DeepSeek Harness 桌面版（Windows）· Electron desktop shell for DeepSeek Harness (dsh web) — 双击即用，无需终端 / double-click to run the harness in a standalone window",
   "main": "src/main.js",
   "license": "MIT",

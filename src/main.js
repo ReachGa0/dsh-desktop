@@ -40,6 +40,7 @@ let ownedDsh = null // 本壳启动的 dsh 子进程；null 表示复用了外�
 let tray = null // 系统托盘
 let isQuitting = false // 用户从托盘选择退出时置 true，放行窗口关闭
 let setupWindow = null // 首次环境引导窗口
+let sessionsWin = null // 会话管理窗口
 
 /* ------------------------------------------------------------------ *
  * 工具：日志
@@ -137,6 +138,76 @@ async function shutdownOwnedDsh() {
     await killProcessTree(pid)
     log(`killed owned dsh pid ${pid}`)
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * 会话管理（读取/删除 ~/.dsh/sessions 下的会话）
+ * ------------------------------------------------------------------ */
+
+function sessionsRoot() {
+  return path.join(process.env.USERPROFILE || process.env.HOME || '', '.dsh', 'sessions')
+}
+
+/** 将工作区目录名（--C-Users-...-- 编码）还原为可读路径。 */
+function decodeWorkspaceName(name) {
+  let s = name
+  if (s.startsWith('--')) s = s.slice(2)
+  if (s.endsWith('--')) s = s.slice(0, -2)
+  s = s.replace(/-/g, '\\')
+  s = s.replace(/^C\\/, 'C:\\')
+  return s
+}
+
+/** 列出所有会话。 */
+function listSessions() {
+  const root = sessionsRoot()
+  const list = []
+  if (!fs.existsSync(root)) return list
+  const workspaces = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory())
+  for (const ws of workspaces) {
+    const wsPath = path.join(root, ws.name)
+    const sDirs = fs.readdirSync(wsPath, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name.startsWith('session-'))
+    for (const s of sDirs) {
+      const sPath = path.join(wsPath, s.name)
+      const stat = fs.statSync(sPath)
+      let sizeBytes = 0
+      const walk = (dir) => {
+        for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+          const fp = path.join(dir, f.name)
+          if (f.isDirectory()) walk(fp)
+          else sizeBytes += fs.statSync(fp).size
+        }
+      }
+      try { walk(sPath) } catch { /* ignore */ }
+      list.push({
+        id: s.name,
+        workspace: decodeWorkspaceName(ws.name),
+        modified: stat.mtimeMs,
+        sizeKB: Math.round(sizeBytes / 1024),
+      })
+    }
+  }
+  return list.sort((a, b) => b.modified - a.modified)
+}
+
+/** 删除指定会话（按 id 定位目录并递归删除）。 */
+function deleteSession(id) {
+  const root = sessionsRoot()
+  if (!fs.existsSync(root) || !/^session-[0-9a-f-]+$/i.test(id)) return { ok: false, error: '非法会话 ID' }
+  const workspaces = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory())
+  for (const ws of workspaces) {
+    const target = path.join(root, ws.name, id)
+    if (fs.existsSync(target)) {
+      try {
+        fs.rmSync(target, { recursive: true, force: true })
+        log(`deleted session ${id} (${ws.name})`)
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: e.message }
+      }
+    }
+  }
+  return { ok: false, error: '未找到该会话' }
 }
 
 /* ------------------------------------------------------------------ *
@@ -297,6 +368,37 @@ function createWindow(url) {
   })
 }
 
+/** 打开会话管理窗口。 */
+function openSessionsWindow() {
+  if (sessionsWin && !sessionsWin.isDestroyed()) {
+    sessionsWin.focus()
+    return
+  }
+  sessionsWin = new BrowserWindow({
+    width: 620,
+    height: 680,
+    title: '会话管理 — DeepSeek Harness Desktop',
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'sessions-preload.js'),
+    },
+  })
+  sessionsWin.setMenuBarVisibility(false)
+  sessionsWin.loadFile(path.join(__dirname, 'sessions.html'))
+  sessionsWin.on('closed', () => {
+    sessionsWin = null
+  })
+
+  ipcMain.removeHandler('sessions:list')
+  ipcMain.removeHandler('sessions:remove')
+  ipcMain.handle('sessions:list', () => listSessions())
+  ipcMain.handle('sessions:remove', (_e, id) => deleteSession(id))
+}
+
 /* ------------------------------------------------------------------ *
  * 系统托盘
  * ------------------------------------------------------------------ */
@@ -337,6 +439,11 @@ function createApplicationMenu() {
     {
       label: '文件',
       submenu: [
+        {
+          label: '会话管理…',
+          click: () => openSessionsWindow(),
+        },
+        { type: 'separator' },
         {
           label: '退出',
           accelerator: 'Alt+F4',
