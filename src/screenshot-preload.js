@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld('__screenshot', {
   done: (rect) => ipcRenderer.send('screenshot:done', rect),
   // 取消
   cancel: () => ipcRenderer.send('screenshot:cancel'),
+  // 截图已加载完成（可显示窗口了）
+  loaded: () => ipcRenderer.send('screenshot:loaded'),
 })

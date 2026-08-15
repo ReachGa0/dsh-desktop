@@ -411,11 +411,13 @@ function openShotWindow() {
     return
   }
   shotWindow = new BrowserWindow({
-    fullscreen: true,
     frame: false,
     resizable: false,
+    movable: false,
+    fullscreen: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    show: false, // 截图加载完成后再显示，避免黑屏闪烁
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -425,10 +427,6 @@ function openShotWindow() {
   })
   shotWindow.setAlwaysOnTop(true, 'screen-saver')
   shotWindow.loadFile(path.join(__dirname, 'screenshot.html'))
-  shotWindow.once('ready-to-show', () => {
-    shotWindow.show()
-    shotWindow.focus()
-  })
   shotWindow.webContents.once('did-finish-load', () => {
     if (pendingShot && !shotWindow.isDestroyed()) {
       shotWindow.webContents.send('screenshot:data', pendingShot.toDataURL())
@@ -437,6 +435,14 @@ function openShotWindow() {
   shotWindow.on('closed', () => {
     shotWindow = null
   })
+}
+
+// 截图在选区窗口内加载完成 → 再显示窗口（避免黑屏"小窗口"）
+function onShotLoaded() {
+  if (shotWindow && !shotWindow.isDestroyed()) {
+    shotWindow.show()
+    shotWindow.focus()
+  }
 }
 
 /** 选区确认：裁剪 → 剪贴板 → 恢复主窗口并粘贴。 */
@@ -456,17 +462,27 @@ function onShotDone(rect) {
   if (r.width <= 0 || r.height <= 0) return
   const cropped = image.crop(r)
   clipboard.writeImage(cropped)
+  // 等主窗口就绪后再聚焦输入框并粘贴（失败则提示手动 Ctrl+V）
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show()
-    mainWindow.focus()
-    mainWindow.webContents
-      .executeJavaScript(
-        `(() => { const el = document.querySelector('textarea, [contenteditable="true"]'); if (el) { el.focus(); return true } return false })()`
-      )
-      .then((focused) => {
-        if (focused) mainWindow.webContents.paste()
-      })
-      .catch(() => {})
+    setTimeout(async () => {
+      let focused = false
+      try {
+        focused = await mainWindow.webContents.executeJavaScript(
+          `(() => { const el = document.querySelector('textarea, [contenteditable="true"]'); if (el) { el.focus(); return true } return false })()`
+        )
+      } catch {
+        focused = false
+      }
+      if (focused) {
+        mainWindow.webContents.paste()
+      } else {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          message: '截图已复制到剪贴板，请在聊天输入框按 Ctrl+V 粘贴',
+          buttons: ['好'],
+        })
+      }
+    }, 400)
   }
 }
 
@@ -669,6 +685,7 @@ if (!gotLock) {
     // 选区截图结果
     ipcMain.on('screenshot:done', (_e, rect) => onShotDone(rect))
     ipcMain.on('screenshot:cancel', () => onShotCancel())
+    ipcMain.on('screenshot:loaded', () => onShotLoaded())
     if (external) log('reusing external dsh service on port ' + port)
   })
 

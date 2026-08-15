@@ -58,8 +58,11 @@
 
   // 接收主进程传来的截图 dataURL
   window.__screenshot.onData((dataUrl) => {
+    bg.onload = () => {
+      window.__screenshot.loaded()
+      setTimeout(() => (hint.style.opacity = '0.9'), 100)
+    }
     bg.src = dataUrl
-    setTimeout(() => (hint.style.opacity = '0.9'), 100)
   })
 
   const updateMask = () => {
