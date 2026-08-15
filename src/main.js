@@ -13,7 +13,7 @@
  * 不修改 dsh 任何代码；服务端用全局安装的 dsh（可用 DSH_BIN 环境变量覆盖路径）。
  */
 
-const { app, BrowserWindow, dialog, shell, Tray, Menu, nativeImage, ipcMain } = require('electron')
+const { app, BrowserWindow, dialog, shell, Tray, Menu, nativeImage, ipcMain, desktopCapturer, clipboard, screen } = require('electron')
 const { spawn, execFile } = require('node:child_process')
 const http = require('node:http')
 const fs = require('node:fs')
@@ -551,6 +551,39 @@ if (!gotLock) {
     // preload 注入的悬浮刷新按钮 → 重新加载页面
     ipcMain.on('dsh-desktop:reload', () => {
       if (mainWindow) mainWindow.webContents.reload()
+    })
+    // 截图：截当前屏幕 → 写剪贴板 → 聚焦聊天输入框并粘贴
+    ipcMain.handle('dsh-desktop:capture', async () => {
+      try {
+        const display = screen.getPrimaryDisplay()
+        const size = display.size
+        const sources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: size.width, height: size.height },
+        })
+        if (!sources.length) return { ok: false, error: '未找到屏幕源' }
+        const image = sources[0].thumbnail
+        if (image.isEmpty()) return { ok: false, error: '截图为空' }
+        clipboard.writeImage(image)
+        // 聚焦聊天输入框并触发粘贴
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          const focused = await mainWindow.webContents
+            .executeJavaScript(
+              `(() => { const el = document.querySelector('textarea, [contenteditable="true"]'); if (el) { el.focus(); return true } return false })()`
+            )
+            .catch(() => false)
+          if (focused) mainWindow.webContents.paste()
+        }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) }
+      }
+    })
+    // 轻提示（截图失败等）
+    ipcMain.on('dsh-desktop:toast', (_e, msg) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        dialog.showMessageBox(mainWindow, { type: 'info', message: String(msg), buttons: ['好'] })
+      }
     })
     if (external) log('reusing external dsh service on port ' + port)
   })
