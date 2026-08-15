@@ -383,12 +383,17 @@ function createApplicationMenu() {
  * 应用生命周期
  * ------------------------------------------------------------------ */
 
+// Windows 任务栏固定/通知规范：AppUserModelID 与打包 appId 保持一致
+app.setAppUserModelId('com.dsh.desktop')
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
+    // 窗口可能隐藏到了托盘：必须 show() 才能从任务栏图标唤起
     if (mainWindow) {
+      mainWindow.show()
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
     }
