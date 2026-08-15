@@ -8,9 +8,22 @@
   html, body { width: 100%; height: 100%; overflow: hidden; background: #000; cursor: crosshair; }
   #stage { position: fixed; inset: 0; }
   #stage img { width: 100%; height: 100%; object-fit: fill; display: block; }
-  #mask { position: fixed; inset: 0; pointer-events: none; }
-  #sel { position: fixed; border: 1.5px solid #2563eb; background: rgba(37, 99, 235, 0.12); display: none; pointer-events: none; }
-  #sel .sz { position: absolute; left: 0; top: -22px; background: #2563eb; color: #fff; font: 11px/18px sans-serif; padding: 0 6px; border-radius: 4px; white-space: nowrap; }
+  .mask { position: fixed; background: rgba(0, 0, 0, 0.45); pointer-events: none; }
+  #sel {
+    position: fixed; border: 1.5px solid #2563eb;
+    background: rgba(37, 99, 235, 0.10);
+    display: none; pointer-events: none; z-index: 3;
+  }
+  #sel .sz {
+    position: absolute; left: 0; top: -22px;
+    background: #2563eb; color: #fff;
+    font: 11px/18px sans-serif; padding: 0 6px; border-radius: 4px; white-space: nowrap;
+  }
+  .handle {
+    position: fixed; width: 9px; height: 9px; background: #2563eb;
+    border: 1px solid #fff; border-radius: 2px; display: none;
+    pointer-events: auto; z-index: 4;
+  }
   #toolbar {
     position: fixed; display: none; align-items: center; gap: 8px;
     background: rgba(15, 23, 42, 0.92); border: 1px solid #334155;
@@ -30,92 +43,173 @@
     position: fixed; left: 50%; top: 20px; transform: translateX(-50%);
     background: rgba(15, 23, 42, 0.85); color: #e2e8f0;
     font: 13px/1 sans-serif; padding: 8px 16px; border-radius: 8px;
-    z-index: 5; pointer-events: none;
+    z-index: 5; pointer-events: none; transition: opacity .15s;
   }
 </style>
 </head>
 <body>
   <div id="stage"><img id="bg" alt=""></div>
-  <div id="mask"></div>
+  <div id="maskTop" class="mask"></div>
+  <div id="maskBottom" class="mask"></div>
+  <div id="maskLeft" class="mask"></div>
+  <div id="maskRight" class="mask"></div>
   <div id="sel"><div class="sz"></div></div>
+  <div id="hN" class="handle" style="cursor:n-resize"></div>
+  <div id="hS" class="handle" style="cursor:s-resize"></div>
+  <div id="hE" class="handle" style="cursor:e-resize"></div>
+  <div id="hW" class="handle" style="cursor:w-resize"></div>
+  <div id="hNE" class="handle" style="cursor:ne-resize"></div>
+  <div id="hNW" class="handle" style="cursor:nw-resize"></div>
+  <div id="hSE" class="handle" style="cursor:se-resize"></div>
+  <div id="hSW" class="handle" style="cursor:sw-resize"></div>
   <div id="toolbar">
-    <span class="tip">拖动鼠标框选区域</span>
+    <span class="tip" id="tip">拖动边框微调选区</span>
     <button id="okBtn">✔ 确定</button>
     <button id="cancelBtn">✕ 取消 (Esc)</button>
   </div>
-  <div id="hint">拖动鼠标框选要截取的区域 · Esc 取消</div>
+  <div id="hint">拖动鼠标框选要截取的区域 · 画完后可拖拽边框微调 · Esc 取消</div>
 
 <script>
-  const bg = document.getElementById('bg')
-  const mask = document.getElementById('mask')
-  const sel = document.getElementById('sel')
-  const toolbar = document.getElementById('toolbar')
-  const hint = document.getElementById('hint')
-  const sz = sel.querySelector('.sz')
+  var bg = document.getElementById('bg')
+  var sel = document.getElementById('sel')
+  var toolbar = document.getElementById('toolbar')
+  var hint = document.getElementById('hint')
+  var tip = document.getElementById('tip')
+  var sz = sel.querySelector('.sz')
+  var masks = {
+    top: document.getElementById('maskTop'),
+    bottom: document.getElementById('maskBottom'),
+    left: document.getElementById('maskLeft'),
+    right: document.getElementById('maskRight'),
+  }
+  var handles = {
+    n: document.getElementById('hN'), s: document.getElementById('hS'),
+    e: document.getElementById('hE'), w: document.getElementById('hW'),
+    ne: document.getElementById('hNE'), nw: document.getElementById('hNW'),
+    se: document.getElementById('hSE'), sw: document.getElementById('hSW'),
+  }
+  var W = window.innerWidth, H = window.innerHeight
+  var MIN = 8
+  var rect = null
+  var mode = 'draw' // draw | adjust
+  var drag = null
 
-  let startX = 0, startY = 0, drawing = false
-  let rect = null
-
-  // 接收主进程传来的截图 dataURL
-  window.__screenshot.onData((dataUrl) => {
-    bg.onload = () => {
+  window.__screenshot.onData(function (dataUrl) {
+    bg.onload = function () {
       window.__screenshot.loaded()
-      setTimeout(() => (hint.style.opacity = '0.9'), 100)
+      setTimeout(function () { hint.style.opacity = '0.9' }, 100)
     }
     bg.src = dataUrl
   })
 
-  const updateMask = () => {
-    if (!rect) { mask.style.background = 'rgba(0,0,0,0.45)'; return }
-    const { x, y, w, h } = rect
-    mask.style.background =
-      `linear-gradient(rgba(0,0,0,0.45) ${y}px, transparent ${y}px ${y + h}px, rgba(0,0,0,0.45) ${y + h}px),` +
-      `linear-gradient(90deg, rgba(0,0,0,0.45) ${x}px, transparent ${x}px ${x + w}px, rgba(0,0,0,0.45) ${x + w}px)`
+  function clampRect(r) {
+    var x = Math.max(0, Math.min(W - MIN, r.x))
+    var y = Math.max(0, Math.min(H - MIN, r.y))
+    var w = Math.min(r.w, W - x)
+    var h = Math.min(r.h, H - y)
+    w = Math.max(MIN, w); h = Math.max(MIN, h)
+    return { x: x, y: y, w: w, h: h }
   }
 
-  document.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return
-    startX = e.clientX; startY = e.clientY
-    drawing = true
-    rect = null
-    sel.style.display = 'none'
-    toolbar.style.display = 'none'
-  })
-
-  document.addEventListener('mousemove', (e) => {
-    if (!drawing) return
-    const x = Math.min(startX, e.clientX)
-    const y = Math.min(startY, e.clientY)
-    const w = Math.abs(e.clientX - startX)
-    const h = Math.abs(e.clientY - startY)
-    rect = { x, y, w, h }
+  function layout() {
+    if (!rect) return
+    var x = rect.x, y = rect.y, w = rect.w, h = rect.h
     sel.style.display = 'block'
     sel.style.left = x + 'px'; sel.style.top = y + 'px'
     sel.style.width = w + 'px'; sel.style.height = h + 'px'
     sz.textContent = Math.round(w) + ' × ' + Math.round(h)
-    updateMask()
-  })
-
-  document.addEventListener('mouseup', () => {
-    if (!drawing) return
-    drawing = false
-    if (rect && rect.w > 5 && rect.h > 5) {
-      const t = document.getElementById('toolbar')
-      t.style.display = 'flex'
-      t.style.left = Math.min(rect.x + rect.w + 10, window.innerWidth - 220) + 'px'
-      t.style.top = (rect.y + rect.h + 12 > window.innerHeight - 60 ? rect.y - 56 : rect.y + rect.h + 12) + 'px'
-      hint.style.opacity = '0'
+    // 遮罩（4 块）
+    masks.top.style.cssText = 'left:0;top:0;width:' + W + 'px;height:' + y + 'px;display:block'
+    masks.bottom.style.cssText = 'left:0;top:' + (y + h) + 'px;width:' + W + 'px;height:' + (H - y - h) + 'px;display:block'
+    masks.left.style.cssText = 'left:0;top:' + y + 'px;width:' + x + 'px;height:' + h + 'px;display:block'
+    masks.right.style.cssText = 'left:' + (x + w) + 'px;top:' + y + 'px;width:' + (W - x - w) + 'px;height:' + h + 'px;display:block'
+    // 手柄
+    if (mode === 'adjust') {
+      var half = 4.5
+      handles.n.style.cssText = 'left:' + (x + w / 2 - half) + 'px;top:' + (y - half) + 'px;display:block'
+      handles.s.style.cssText = 'left:' + (x + w / 2 - half) + 'px;top:' + (y + h - half) + 'px;display:block'
+      handles.e.style.cssText = 'left:' + (x + w - half) + 'px;top:' + (y + h / 2 - half) + 'px;display:block'
+      handles.w.style.cssText = 'left:' + (x - half) + 'px;top:' + (y + h / 2 - half) + 'px;display:block'
+      handles.ne.style.cssText = 'left:' + (x + w - half) + 'px;top:' + (y - half) + 'px;display:block'
+      handles.nw.style.cssText = 'left:' + (x - half) + 'px;top:' + (y - half) + 'px;display:block'
+      handles.se.style.cssText = 'left:' + (x + w - half) + 'px;top:' + (y + h - half) + 'px;display:block'
+      handles.sw.style.cssText = 'left:' + (x - half) + 'px;top:' + (y + h - half) + 'px;display:block'
     } else {
-      rect = null; sel.style.display = 'none'
+      Object.keys(handles).forEach(function (k) { handles[k].style.display = 'none' })
+    }
+  }
+
+  function inside(e, r) {
+    return e.clientX >= r.x && e.clientX <= r.x + r.w && e.clientY >= r.y && e.clientY <= r.y + r.h
+  }
+
+  document.addEventListener('mousedown', function (e) {
+    if (e.button !== 0) return
+    if (mode === 'draw') {
+      drag = { type: 'draw', x0: e.clientX, y0: e.clientY }
+    } else {
+      // 调整模式：手柄 / 拖动移动 / 外部重画
+      var hKey = null
+      for (var k in handles) if (e.target === handles[k]) { hKey = k; break }
+      if (hKey) {
+        drag = { type: 'resize', dir: hKey, x0: e.clientX, y0: e.clientY, orig: { x: rect.x, y: rect.y, w: rect.w, h: rect.h } }
+      } else if (inside(e, rect)) {
+        drag = { type: 'move', x0: e.clientX, y0: e.clientY, orig: { x: rect.x, y: rect.y } }
+      } else {
+        // 点击选区外 → 重新画
+        mode = 'draw'
+        rect = null
+        sel.style.display = 'none'
+        toolbar.style.display = 'none'
+        Object.keys(handles).forEach(function (k) { handles[k].style.display = 'none' })
+        masks.top.style.display = masks.bottom.style.display = masks.left.style.display = masks.right.style.display = 'none'
+        hint.style.opacity = '0.9'
+        drag = { type: 'draw', x0: e.clientX, y0: e.clientY }
+      }
     }
   })
 
-  document.getElementById('okBtn').onclick = () => {
+  document.addEventListener('mousemove', function (e) {
+    if (!drag) return
+    var dx = e.clientX - drag.x0
+    var dy = e.clientY - drag.y0
+    if (drag.type === 'draw') {
+      rect = clampRect({ x: Math.min(drag.x0, e.clientX), y: Math.min(drag.y0, e.clientY), w: Math.abs(e.clientX - drag.x0), h: Math.abs(e.clientY - drag.y0) })
+      layout()
+    } else if (drag.type === 'move') {
+      rect = clampRect({ x: drag.orig.x + dx, y: drag.orig.y + dy, w: rect.w, h: rect.h })
+      layout()
+    } else if (drag.type === 'resize') {
+      var o = drag.orig
+      var r = { x: o.x, y: o.y, w: o.w, h: o.h }
+      if (drag.dir.indexOf('e') !== -1) r.w = o.w + dx
+      if (drag.dir.indexOf('s') !== -1) r.h = o.h + dy
+      if (drag.dir.indexOf('w') !== -1) { r.x = o.x + dx; r.w = o.w - dx }
+      if (drag.dir.indexOf('n') !== -1) { r.y = o.y + dy; r.h = o.h - dy }
+      rect = clampRect(r)
+      layout()
+    }
+  })
+
+  document.addEventListener('mouseup', function () {
+    if (!drag) return
+    drag = null
+    if (mode === 'draw' && rect && rect.w >= MIN && rect.h >= MIN) {
+      mode = 'adjust'
+      var t = document.getElementById('toolbar')
+      t.style.display = 'flex'
+      t.style.left = Math.min(rect.x + rect.w + 10, W - 230) + 'px'
+      t.style.top = (rect.y + rect.h + 14 > H - 60 ? rect.y - 58 : rect.y + rect.h + 14) + 'px'
+      hint.style.opacity = '0'
+      layout() // 显示手柄
+    }
+  })
+
+  document.getElementById('okBtn').onclick = function () {
     if (rect) window.__screenshot.done(rect)
   }
-  document.getElementById('cancelBtn').onclick = () => window.__screenshot.cancel()
-
-  document.addEventListener('keydown', (e) => {
+  document.getElementById('cancelBtn').onclick = function () { window.__screenshot.cancel() }
+  document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') window.__screenshot.cancel()
     if (e.key === 'Enter' && rect) window.__screenshot.done(rect)
   })
