@@ -41,6 +41,8 @@ let tray = null // 系统托盘
 let isQuitting = false // 用户从托盘选择退出时置 true，放行窗口关闭
 let setupWindow = null // 首次环境引导窗口
 let sessionsWin = null // 会话管理窗口
+let shotWindow = null // 选区截图窗口
+let pendingShot = null // 全屏截图（nativeImage），选区确认后裁剪
 
 /* ------------------------------------------------------------------ *
  * 工具：日志
@@ -400,6 +402,79 @@ function openSessionsWindow() {
 }
 
 /* ------------------------------------------------------------------ *
+ * 选区截图窗口
+ * ------------------------------------------------------------------ */
+
+function openShotWindow() {
+  if (shotWindow && !shotWindow.isDestroyed()) {
+    shotWindow.focus()
+    return
+  }
+  shotWindow = new BrowserWindow({
+    fullscreen: true,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'screenshot-preload.js'),
+    },
+  })
+  shotWindow.setAlwaysOnTop(true, 'screen-saver')
+  shotWindow.loadFile(path.join(__dirname, 'screenshot.html'))
+  shotWindow.once('ready-to-show', () => {
+    shotWindow.show()
+    shotWindow.focus()
+  })
+  shotWindow.webContents.once('did-finish-load', () => {
+    if (pendingShot && !shotWindow.isDestroyed()) {
+      shotWindow.webContents.send('screenshot:data', pendingShot.toDataURL())
+    }
+  })
+  shotWindow.on('closed', () => {
+    shotWindow = null
+  })
+}
+
+/** 选区确认：裁剪 → 剪贴板 → 主窗口粘贴。 */
+function onShotDone(rect) {
+  const image = pendingShot
+  pendingShot = null
+  if (shotWindow && !shotWindow.isDestroyed()) shotWindow.destroy()
+  if (!image || !rect) return
+  const sf = screen.getPrimaryDisplay().scaleFactor || 1
+  const r = {
+    x: Math.round(rect.x * sf),
+    y: Math.round(rect.y * sf),
+    width: Math.round(rect.w * sf),
+    height: Math.round(rect.h * sf),
+  }
+  if (r.width <= 0 || r.height <= 0) return
+  const cropped = image.crop(r)
+  clipboard.writeImage(cropped)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show()
+    mainWindow.focus()
+    mainWindow.webContents
+      .executeJavaScript(
+        `(() => { const el = document.querySelector('textarea, [contenteditable="true"]'); if (el) { el.focus(); return true } return false })()`
+      )
+      .then((focused) => {
+        if (focused) mainWindow.webContents.paste()
+      })
+      .catch(() => {})
+  }
+}
+
+function onShotCancel() {
+  pendingShot = null
+  if (shotWindow && !shotWindow.isDestroyed()) shotWindow.destroy()
+}
+
+/* ------------------------------------------------------------------ *
  * 系统托盘
  * ------------------------------------------------------------------ */
 
@@ -552,28 +627,22 @@ if (!gotLock) {
     ipcMain.on('dsh-desktop:reload', () => {
       if (mainWindow) mainWindow.webContents.reload()
     })
-    // 截图：截当前屏幕 → 写剪贴板 → 聚焦聊天输入框并粘贴
+    // 选区截图：截全屏 → 打开选区窗口 → 用户框选 → 裁剪 → 剪贴板 → 粘贴聊天框
     ipcMain.handle('dsh-desktop:capture', async () => {
       try {
         const display = screen.getPrimaryDisplay()
-        const size = display.size
+        const sf = display.scaleFactor || 1
         const sources = await desktopCapturer.getSources({
           types: ['screen'],
-          thumbnailSize: { width: size.width, height: size.height },
+          thumbnailSize: {
+            width: Math.round(display.size.width * sf),
+            height: Math.round(display.size.height * sf),
+          },
         })
         if (!sources.length) return { ok: false, error: '未找到屏幕源' }
-        const image = sources[0].thumbnail
-        if (image.isEmpty()) return { ok: false, error: '截图为空' }
-        clipboard.writeImage(image)
-        // 聚焦聊天输入框并触发粘贴
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          const focused = await mainWindow.webContents
-            .executeJavaScript(
-              `(() => { const el = document.querySelector('textarea, [contenteditable="true"]'); if (el) { el.focus(); return true } return false })()`
-            )
-            .catch(() => false)
-          if (focused) mainWindow.webContents.paste()
-        }
+        pendingShot = sources[0].thumbnail
+        if (pendingShot.isEmpty()) return { ok: false, error: '截图为空' }
+        openShotWindow()
         return { ok: true }
       } catch (e) {
         return { ok: false, error: String((e && e.message) || e) }
@@ -585,6 +654,9 @@ if (!gotLock) {
         dialog.showMessageBox(mainWindow, { type: 'info', message: String(msg), buttons: ['好'] })
       }
     })
+    // 选区截图结果
+    ipcMain.on('screenshot:done', (_e, rect) => onShotDone(rect))
+    ipcMain.on('screenshot:cancel', () => onShotCancel())
     if (external) log('reusing external dsh service on port ' + port)
   })
 

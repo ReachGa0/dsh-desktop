@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>截图选区</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; cursor: crosshair; }
+  #stage { position: fixed; inset: 0; }
+  #stage img { width: 100%; height: 100%; object-fit: fill; display: block; }
+  #mask { position: fixed; inset: 0; pointer-events: none; }
+  #sel { position: fixed; border: 1.5px solid #2563eb; background: rgba(37, 99, 235, 0.12); display: none; pointer-events: none; }
+  #sel .sz { position: absolute; left: 0; top: -22px; background: #2563eb; color: #fff; font: 11px/18px sans-serif; padding: 0 6px; border-radius: 4px; white-space: nowrap; }
+  #toolbar {
+    position: fixed; display: none; align-items: center; gap: 8px;
+    background: rgba(15, 23, 42, 0.92); border: 1px solid #334155;
+    border-radius: 10px; padding: 8px 12px; z-index: 10;
+    box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  }
+  #toolbar .tip { color: #94a3b8; font: 12px/1 sans-serif; margin-right: 4px; }
+  #toolbar button {
+    border: none; border-radius: 6px; padding: 6px 14px; cursor: pointer;
+    font: 600 12px/1 sans-serif;
+  }
+  #okBtn { background: #2563eb; color: #fff; }
+  #okBtn:hover { background: #1d4ed8; }
+  #cancelBtn { background: #334155; color: #e2e8f0; }
+  #cancelBtn:hover { background: #475569; }
+  #hint {
+    position: fixed; left: 50%; top: 20px; transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.85); color: #e2e8f0;
+    font: 13px/1 sans-serif; padding: 8px 16px; border-radius: 8px;
+    z-index: 5; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="stage"><img id="bg" alt=""></div>
+  <div id="mask"></div>
+  <div id="sel"><div class="sz"></div></div>
+  <div id="toolbar">
+    <span class="tip">拖动鼠标框选区域</span>
+    <button id="okBtn">✔ 确定</button>
+    <button id="cancelBtn">✕ 取消 (Esc)</button>
+  </div>
+  <div id="hint">拖动鼠标框选要截取的区域 · Esc 取消</div>
+
+<script>
+  const bg = document.getElementById('bg')
+  const mask = document.getElementById('mask')
+  const sel = document.getElementById('sel')
+  const toolbar = document.getElementById('toolbar')
+  const hint = document.getElementById('hint')
+  const sz = sel.querySelector('.sz')
+
+  let startX = 0, startY = 0, drawing = false
+  let rect = null
+
+  // 接收主进程传来的截图 dataURL
+  window.__screenshot.onData((dataUrl) => {
+    bg.src = dataUrl
+    setTimeout(() => (hint.style.opacity = '0.9'), 100)
+  })
+
+  const updateMask = () => {
+    if (!rect) { mask.style.background = 'rgba(0,0,0,0.45)'; return }
+    const { x, y, w, h } = rect
+    mask.style.background =
+      `linear-gradient(rgba(0,0,0,0.45) ${y}px, transparent ${y}px ${y + h}px, rgba(0,0,0,0.45) ${y + h}px),` +
+      `linear-gradient(90deg, rgba(0,0,0,0.45) ${x}px, transparent ${x}px ${x + w}px, rgba(0,0,0,0.45) ${x + w}px)`
+  }
+
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return
+    startX = e.clientX; startY = e.clientY
+    drawing = true
+    rect = null
+    sel.style.display = 'none'
+    toolbar.style.display = 'none'
+  })
+
+  document.addEventListener('mousemove', (e) => {
+    if (!drawing) return
+    const x = Math.min(startX, e.clientX)
+    const y = Math.min(startY, e.clientY)
+    const w = Math.abs(e.clientX - startX)
+    const h = Math.abs(e.clientY - startY)
+    rect = { x, y, w, h }
+    sel.style.display = 'block'
+    sel.style.left = x + 'px'; sel.style.top = y + 'px'
+    sel.style.width = w + 'px'; sel.style.height = h + 'px'
+    sz.textContent = Math.round(w) + ' × ' + Math.round(h)
+    updateMask()
+  })
+
+  document.addEventListener('mouseup', () => {
+    if (!drawing) return
+    drawing = false
+    if (rect && rect.w > 5 && rect.h > 5) {
+      const t = document.getElementById('toolbar')
+      t.style.display = 'flex'
+      t.style.left = Math.min(rect.x + rect.w + 10, window.innerWidth - 220) + 'px'
+      t.style.top = (rect.y + rect.h + 12 > window.innerHeight - 60 ? rect.y - 56 : rect.y + rect.h + 12) + 'px'
+      hint.style.opacity = '0'
+    } else {
+      rect = null; sel.style.display = 'none'
+    }
+  })
+
+  document.getElementById('okBtn').onclick = () => {
+    if (rect) window.__screenshot.done(rect)
+  }
+  document.getElementById('cancelBtn').onclick = () => window.__screenshot.cancel()
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.__screenshot.cancel()
+    if (e.key === 'Enter' && rect) window.__screenshot.done(rect)
+  })
+</script>
+</body>
+</html>
