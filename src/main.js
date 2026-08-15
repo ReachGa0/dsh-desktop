@@ -410,11 +410,17 @@ function openShotWindow() {
     shotWindow.focus()
     return
   }
+  // 用显示器精确尺寸铺满屏幕（不用 fullscreen，Windows 上更可靠）
+  const display = screen.getPrimaryDisplay()
+  const bounds = display.bounds
   shotWindow = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     frame: false,
     resizable: false,
     movable: false,
-    fullscreen: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false, // 截图加载完成后再显示，避免黑屏闪烁
@@ -426,6 +432,7 @@ function openShotWindow() {
     },
   })
   shotWindow.setAlwaysOnTop(true, 'screen-saver')
+  shotWindow.setBounds(bounds) // 再次确保铺满
   shotWindow.loadFile(path.join(__dirname, 'screenshot.html'))
   shotWindow.webContents.once('did-finish-load', () => {
     if (pendingShot && !shotWindow.isDestroyed()) {
@@ -461,8 +468,12 @@ function onShotDone(rect) {
   }
   if (r.width <= 0 || r.height <= 0) return
   const cropped = image.crop(r)
+  // 保存一份临时文件（验证/诊断用）
+  try {
+    fs.writeFileSync(path.join(os.tmpdir(), 'dsh-screenshot.png'), cropped.toPNG())
+  } catch { /* 非致命 */ }
   clipboard.writeImage(cropped)
-  // 等主窗口就绪后再聚焦输入框并粘贴（失败则提示手动 Ctrl+V）
+  // 等主窗口就绪后尝试自动粘贴；若聚焦失败则提示手动 Ctrl+V
   if (mainWindow && !mainWindow.isDestroyed()) {
     setTimeout(async () => {
       let focused = false
