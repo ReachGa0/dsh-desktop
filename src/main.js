@@ -439,11 +439,12 @@ function openShotWindow() {
   })
 }
 
-/** 选区确认：裁剪 → 剪贴板 → 主窗口粘贴。 */
+/** 选区确认：裁剪 → 剪贴板 → 恢复主窗口并粘贴。 */
 function onShotDone(rect) {
   const image = pendingShot
   pendingShot = null
   if (shotWindow && !shotWindow.isDestroyed()) shotWindow.destroy()
+  showMainWindow() // 恢复显示聊天窗口
   if (!image || !rect) return
   const sf = screen.getPrimaryDisplay().scaleFactor || 1
   const r = {
@@ -472,6 +473,7 @@ function onShotDone(rect) {
 function onShotCancel() {
   pendingShot = null
   if (shotWindow && !shotWindow.isDestroyed()) shotWindow.destroy()
+  showMainWindow() // 恢复显示聊天窗口
 }
 
 /* ------------------------------------------------------------------ *
@@ -627,9 +629,12 @@ if (!gotLock) {
     ipcMain.on('dsh-desktop:reload', () => {
       if (mainWindow) mainWindow.webContents.reload()
     })
-    // 选区截图：截全屏 → 打开选区窗口 → 用户框选 → 裁剪 → 剪贴板 → 粘贴聊天框
+    // 选区截图：隐藏主窗口 → 截全屏 → 选区窗口 → 裁剪 → 剪贴板 → 粘贴
     ipcMain.handle('dsh-desktop:capture', async () => {
       try {
+        // 先隐藏主窗口，避免截到聊天框本身
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
+        await new Promise((r) => setTimeout(r, 250))
         const display = screen.getPrimaryDisplay()
         const sf = display.scaleFactor || 1
         const sources = await desktopCapturer.getSources({
@@ -639,12 +644,19 @@ if (!gotLock) {
             height: Math.round(display.size.height * sf),
           },
         })
-        if (!sources.length) return { ok: false, error: '未找到屏幕源' }
+        if (!sources.length) {
+          showMainWindow()
+          return { ok: false, error: '未找到屏幕源' }
+        }
         pendingShot = sources[0].thumbnail
-        if (pendingShot.isEmpty()) return { ok: false, error: '截图为空' }
+        if (pendingShot.isEmpty()) {
+          showMainWindow()
+          return { ok: false, error: '截图为空' }
+        }
         openShotWindow()
         return { ok: true }
       } catch (e) {
+        showMainWindow()
         return { ok: false, error: String((e && e.message) || e) }
       }
     })
