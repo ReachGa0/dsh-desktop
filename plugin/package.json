@@ -1,0 +1,39 @@
+{
+  "name": "dsh-desktop-launcher",
+  "version": "0.1.0",
+  "description": "dsh plugin: launch the dsh-desktop Windows shell (region screenshot, tray, session manager) from the DSH conversation via a desktop_launch tool.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "license": "MIT",
+  "author": "ReachGa0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ReachGa0/dsh-desktop.git",
+    "directory": "plugin"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek",
+    "deepseek-harness",
+    "electron",
+    "desktop"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
