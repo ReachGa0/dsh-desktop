@@ -1,4 +1,4 @@
-# dsh-desktop-launcher
+# dsh-desktop-windows-launcher
 
 A [dsh](https://github.com/deepseek-ai/dsh) plugin that launches the
 **[dsh-desktop](https://github.com/ReachGa0/dsh-desktop)** Windows shell from
@@ -13,13 +13,13 @@ installed it returns the latest GitHub Release download link.
 ## Install
 
 ```sh
-dsh plugin add ReachGa0/dsh-desktop
+dsh plugin add dsh-desktop-windows-launcher
 ```
 
-or from npm (once published):
+or from the repo subdirectory:
 
 ```sh
-dsh plugin add dsh-desktop-launcher
+dsh plugin add github:ReachGa0/dsh-desktop#path:/plugin
 ```
 
 ## Usage

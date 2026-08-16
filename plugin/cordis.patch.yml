@@ -1,6 +1,6 @@
-# dsh-desktop-launcher bundle patch: mount the plugin under its package
-# name, resolved through the profile's node_modules when listed in
-# dsh.profile.bundles (dsh plugin add ReachGa0/dsh-desktop).
+# dsh-desktop-windows-launcher bundle patch: mount the plugin under its
+# package name, resolved through the profile's node_modules when listed in
+# dsh.profile.bundles (dsh plugin add dsh-desktop-windows-launcher).
 - insert:
-    - id: dsh-desktop-launcher
-      name: dsh-desktop-launcher
+    - id: dsh-desktop-windows-launcher
+      name: dsh-desktop-windows-launcher

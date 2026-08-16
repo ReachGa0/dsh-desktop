@@ -1,10 +1,9 @@
 {
-  "name": "dsh-desktop-launcher",
+  "name": "dsh-desktop-windows-launcher",
   "version": "0.1.0",
   "description": "dsh plugin: launch the dsh-desktop Windows shell (region screenshot, tray, session manager) from the DSH conversation via a desktop_launch tool.",
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/index.d.ts",
   "license": "MIT",
   "author": "ReachGa0",
   "repository": {

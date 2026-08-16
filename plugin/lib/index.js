@@ -1,8 +1,8 @@
-// dsh-desktop-launcher: launch the dsh-desktop Windows shell from the DSH
-// conversation. The shell is the standalone Electron app (region screenshot,
-// system tray, session manager); this plugin only needs to find and start its
-// installed exe, or point the user at the latest GitHub Release when it is
-// missing. Loaded via cordis.patch.yml (see package.json dsh.bundle).
+// dsh-desktop-windows-launcher: launch the dsh-desktop Windows shell from the
+// DSH conversation. The shell is the standalone Electron app (region
+// screenshot, system tray, session manager); this plugin only needs to find
+// and start its installed exe, or point the user at the latest GitHub Release
+// when it is missing. Loaded via cordis.patch.yml (see package.json dsh.bundle).
 //
 // Zero runtime dependencies: the tool definition is a raw JSON-Schema tool
 // registered through ctx.tools, and all effects use node builtins only —
@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const name = 'dsh-desktop-launcher'
+export const name = 'dsh-desktop-windows-launcher'
 export const inject = ['tools']
 
 const PKG_DIR = dirname(fileURLToPath(import.meta.url))
