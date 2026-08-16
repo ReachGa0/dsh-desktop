@@ -8,7 +8,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)]()
 [![Build](https://github.com/ReachGa0/dsh-desktop/actions/workflows/build.yml/badge.svg)](https://github.com/ReachGa0/dsh-desktop/actions)
 
-> **English summary** · An [Electron](https://www.electronjs.org/) desktop shell for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh web) on **Windows** — double-click to run the harness in a standalone window. No terminal, no commands, no browser juggling. System tray support, floating reload button, configurable port. Full English docs: [README.en.md](README.en.md)
+> **English summary** · An [Electron](https://www.electronjs.org/) desktop shell for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh web) on **Windows** — double-click to run the harness in a standalone window. **Region screenshot to ask AI**, system tray, session manager, auto environment setup. Full English docs: [README.en.md](README.en.md)
 
 DeepSeek Harness 的 **Electron 桌面壳**：双击图标，一个独立窗口运行 `dsh web` —— 不用开终端、不用敲命令、不用切浏览器。
 
@@ -16,9 +16,13 @@ DeepSeek Harness 的 **Electron 桌面壳**：双击图标，一个独立窗口�
 
 ## ✨ 特性
 
+- 📸 **选区截图提问**：一键截屏 → 全屏遮罩实时框选（GPU 加速、8 方向手柄微调）→ 自动粘贴到聊天框 → AI 直接看图回答；截图时自动隐藏聊天窗口
+- 🗂️ **会话管理**：`Alt → 文件 → 会话管理…` 列出所有会话，一键删除（永久清理聊天记录）
 - 🪟 **独立窗口**：原生桌面窗口加载 Harness Web UI，可最小化到任务栏
 - 🍱 **系统托盘**：关窗口最小化到托盘常驻，右键菜单可随时显示/退出
+- 🔄 **便捷刷新**：`F5` / `Ctrl+R` / 右下角悬浮按钮，加载新插件不用重启窗口
 - 🧭 **环境自动引导**：首次启动自动检测 Node.js / dsh，缺失时引导一键安装，小白也能搞定
+- 🔧 **可换端口**：`npm start -- --port 3081` 解决端口占用
 - 🧠 **智能复用**：检测到已有的 dsh 服务就直接复用，不重复启动
 - 🧹 **干净退出**：关窗口只杀自己启动的 dsh 进程，绝不误杀外部服务
 - 🔒 **单实例锁**：防止双开冲突
@@ -31,6 +35,15 @@ DeepSeek Harness 的 **Electron 桌面壳**：双击图标，一个独立窗口�
 2. 没有 → 自动执行 `dsh web --port 3080`（日志在 `%APPDATA%/DeepSeek Harness Desktop/dsh.log`）；
 3. 就绪后打开 Electron 窗口加载 Web UI；
 4. 关窗口 → 自动杀掉由本壳启动的 dsh 进程树（手动起的外部服务不会被误杀）。
+
+## 📸 选区截图提问
+
+1. 点右下角 **📸**（聊天窗口自动隐藏）
+2. 全屏遮罩上**拖动框选**区域（实时显示，画完可拖 8 个手柄微调）
+3. 点 **✔ 确定**（或双击 / 回车）→ 聊天窗口恢复
+4. 截图自动进入聊天框 → 输入问题 → AI 看图回答
+
+> 配合 [ModLens](https://www.npmjs.com/package/@liustack/modlens) 等识图插件，DeepSeek 文本模型也能看懂图片。
 
 ## 前提
 
@@ -60,17 +73,13 @@ npm start -- --port 3081
 
 首次打开后：**设置 → 模型 → 填入 DeepSeek API Key**，然后选择工作区即可使用。
 
-## 截图
-
-> 敬请期待 —— 欢迎提交你的界面截图（PR 或 Issue 均可）。
-
 ## 打包成安装程序
 
 ```sh
 npm run dist
 ```
 
-产物在 `release/` 下：`dsh-desktop-0.1.0-setup.exe`（NSIS 安装包）。
+产物在 `release/` 下：`dsh-desktop-<版本>-setup.exe`（NSIS 安装包）。
 
 自定义图标：放一个 `assets/icon.ico`（≥256×256），并在 `package.json` 的 `build.win` 里加 `"icon": "assets/icon.ico"`。
 
@@ -79,6 +88,8 @@ npm run dist
 - **启动失败弹窗**：看 `%APPDATA%/DeepSeek Harness Desktop/dsh.log`；确认 `dsh --version` 可用。
 - **端口被占**：用 `npm start -- --port <新端口>` 换一个端口即可。
 - **改了 dsh 版本**：重新 `npm i -g @deepseek-ai/dsh` 即可，壳无需改动。
+- **截图没进聊天框**：点一下输入框按 `Ctrl+V`（截图已在剪贴板）。
+- **关闭窗口后应用还在**：正常！它最小化到托盘了，右键托盘图标选"退出"。
 
 ## 贡献
 
