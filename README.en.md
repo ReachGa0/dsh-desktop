@@ -7,6 +7,7 @@
 [![dsh](https://img.shields.io/badge/dsh-0.1.0--rc.6-purple)](https://github.com/deepseek-ai/deepseek-harness)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)]()
 [![Build](https://github.com/ReachGa0/dsh-desktop/actions/workflows/build.yml/badge.svg)](https://github.com/ReachGa0/dsh-desktop/actions)
+[![awesome-dsh-plugin](https://img.shields.io/badge/awesome--dsh--plugin-listed-8A2BE2)](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
 
 An **Electron desktop shell** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): double-click an icon and get a standalone window running `dsh web` — no terminal, no manual commands, no browser tab juggling. **Region screenshot to ask the AI**, system tray, session manager, auto environment setup.
 
