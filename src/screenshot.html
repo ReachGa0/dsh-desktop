@@ -7,7 +7,11 @@
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #000; cursor: crosshair; }
   #stage { position: fixed; inset: 0; }
-  #stage img { width: 100%; height: 100%; object-fit: fill; display: block; }
+  #stage img {
+    width: 100%; height: 100%; object-fit: fill; display: block;
+    -webkit-user-drag: none; user-drag: none; draggable: false;
+    pointer-events: none; /* 避免 img 拦截鼠标事件/触发拖拽 */
+  }
   /* 遮罩：全屏半透明黑 + clip-path 挖洞（GPU 加速，每帧只改字符串） */
   #mask {
     position: fixed; inset: 0; z-index: 2; pointer-events: none;
@@ -166,6 +170,7 @@
 
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return
+    e.preventDefault() // 阻止 img 拖拽等默认行为，确保 mousemove 正常触发
     if (mode === 'draw') {
       drag = { type: 'draw', x0: e.clientX, y0: e.clientY }
       return
