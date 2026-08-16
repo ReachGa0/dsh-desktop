@@ -200,9 +200,15 @@
       t.style.display = 'flex'
       t.style.left = Math.min(rect.x + rect.w + 10, W - 230) + 'px'
       t.style.top = (rect.y + rect.h + 14 > H - 60 ? rect.y - 58 : rect.y + rect.h + 14) + 'px'
+      tip.textContent = '可拖拽边框微调 · 点确定或双击完成'
       hint.style.opacity = '0'
       layout() // 显示手柄
     }
+  })
+
+  // 双击选区 → 直接提交
+  document.addEventListener('dblclick', function (e) {
+    if (rect && inside(e, rect)) window.__screenshot.done(rect)
   })
 
   document.getElementById('okBtn').onclick = function () {

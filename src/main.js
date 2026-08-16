@@ -18,6 +18,7 @@ const { spawn, execFile } = require('node:child_process')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
+const os = require('node:os')
 
 const DEFAULT_PORT = 3080
 const START_TIMEOUT_MS = 90_000
@@ -50,6 +51,15 @@ let pendingShot = null // 全屏截图（nativeImage），选区确认后裁剪
 
 function log(...args) {
   console.log(LOG_PREFIX, ...args)
+}
+
+/** 截图流程日志（追加写入 ~/.dsh/logs/screenshot.log，便于诊断）。 */
+function shotLog(...args) {
+  try {
+    const line = `[${new Date().toISOString()}] ${args.join(' ')}`
+    console.log('[shot]', ...args)
+    fs.appendFileSync(path.join(os.homedir(), '.dsh', 'logs', 'screenshot.log'), line + '\n')
+  } catch { /* 忽略日志错误 */ }
 }
 
 /* ------------------------------------------------------------------ *
@@ -437,6 +447,7 @@ function openShotWindow() {
   shotWindow.webContents.once('did-finish-load', () => {
     if (pendingShot && !shotWindow.isDestroyed()) {
       shotWindow.webContents.send('screenshot:data', pendingShot.toDataURL())
+      shotLog('shot: data sent to selector window')
     }
   })
   shotWindow.on('closed', () => {
@@ -454,11 +465,15 @@ function onShotLoaded() {
 
 /** 选区确认：裁剪 → 剪贴板 → 恢复主窗口并粘贴。 */
 function onShotDone(rect) {
+  shotLog('shot: done called', rect ? JSON.stringify(rect) : 'null')
   const image = pendingShot
   pendingShot = null
   if (shotWindow && !shotWindow.isDestroyed()) shotWindow.destroy()
   showMainWindow() // 恢复显示聊天窗口
-  if (!image || !rect) return
+  if (!image || !rect) {
+    shotLog('shot: done skipped (no image or rect)')
+    return
+  }
   const sf = screen.getPrimaryDisplay().scaleFactor || 1
   const r = {
     x: Math.round(rect.x * sf),
@@ -466,13 +481,21 @@ function onShotDone(rect) {
     width: Math.round(rect.w * sf),
     height: Math.round(rect.h * sf),
   }
-  if (r.width <= 0 || r.height <= 0) return
+  if (r.width <= 0 || r.height <= 0) {
+    shotLog('shot: invalid crop rect after scale')
+    return
+  }
   const cropped = image.crop(r)
+  shotLog('shot: cropped', cropped.getSize().width + 'x' + cropped.getSize().height)
   // 保存一份临时文件（验证/诊断用）
   try {
     fs.writeFileSync(path.join(os.tmpdir(), 'dsh-screenshot.png'), cropped.toPNG())
-  } catch { /* 非致命 */ }
+    shotLog('shot: saved temp png')
+  } catch (e) {
+    shotLog('shot: temp save failed', String(e && e.message || e))
+  }
   clipboard.writeImage(cropped)
+  shotLog('shot: written to clipboard')
   // 等主窗口就绪后尝试自动粘贴；若聚焦失败则提示手动 Ctrl+V
   if (mainWindow && !mainWindow.isDestroyed()) {
     setTimeout(async () => {
@@ -658,6 +681,7 @@ if (!gotLock) {
     })
     // 选区截图：隐藏主窗口 → 截全屏 → 选区窗口 → 裁剪 → 剪贴板 → 粘贴
     ipcMain.handle('dsh-desktop:capture', async () => {
+      shotLog('capture: requested')
       try {
         // 先隐藏主窗口，避免截到聊天框本身
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
@@ -673,17 +697,21 @@ if (!gotLock) {
         })
         if (!sources.length) {
           showMainWindow()
+          shotLog('capture: no screen source')
           return { ok: false, error: '未找到屏幕源' }
         }
         pendingShot = sources[0].thumbnail
         if (pendingShot.isEmpty()) {
           showMainWindow()
+          shotLog('capture: empty thumbnail')
           return { ok: false, error: '截图为空' }
         }
+        shotLog('capture: captured', pendingShot.getSize().width + 'x' + pendingShot.getSize().height)
         openShotWindow()
         return { ok: true }
       } catch (e) {
         showMainWindow()
+        shotLog('capture: error', String((e && e.message) || e))
         return { ok: false, error: String((e && e.message) || e) }
       }
     })
