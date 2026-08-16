@@ -8,7 +8,23 @@
   html, body { width: 100%; height: 100%; overflow: hidden; background: #000; cursor: crosshair; }
   #stage { position: fixed; inset: 0; }
   #stage img { width: 100%; height: 100%; object-fit: fill; display: block; }
-  #cv { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+  /* 遮罩：全屏半透明黑 + clip-path 挖洞（GPU 加速，每帧只改字符串） */
+  #mask {
+    position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    background: rgba(0, 0, 0, 0.45);
+    clip-path: polygon(0px 0px, 0px 0px, 0px 0px);
+  }
+  /* 选区框：border div，transform 定位 + 尺寸更新 */
+  #sel {
+    position: fixed; z-index: 3; pointer-events: none;
+    border: 1.5px solid #2563eb; background: rgba(37, 99, 235, 0.08);
+    transform-origin: 0 0;
+  }
+  #sel .sz {
+    position: absolute; left: 0; top: -22px;
+    background: #2563eb; color: #fff;
+    font: 11px/18px sans-serif; padding: 0 6px; border-radius: 4px; white-space: nowrap;
+  }
   .handle {
     position: fixed; width: 9px; height: 9px; background: #2563eb;
     border: 1px solid #fff; border-radius: 2px; display: none;
@@ -40,7 +56,8 @@
 </head>
 <body>
   <div id="stage"><img id="bg" alt=""></div>
-  <canvas id="cv"></canvas>
+  <div id="mask"></div>
+  <div id="sel"><div class="sz"></div></div>
   <div id="hN" class="handle" style="cursor:n-resize"></div>
   <div id="hS" class="handle" style="cursor:s-resize"></div>
   <div id="hE" class="handle" style="cursor:e-resize"></div>
@@ -58,11 +75,12 @@
 
 <script>
   var bg = document.getElementById('bg')
+  var mask = document.getElementById('mask')
+  var sel = document.getElementById('sel')
+  var sz = sel.querySelector('.sz')
   var toolbar = document.getElementById('toolbar')
   var hint = document.getElementById('hint')
   var tip = document.getElementById('tip')
-  var cv = document.getElementById('cv')
-  var cx = cv.getContext('2d')
   var handles = {
     n: document.getElementById('hN'), s: document.getElementById('hS'),
     e: document.getElementById('hE'), w: document.getElementById('hW'),
@@ -70,7 +88,6 @@
     se: document.getElementById('hSE'), sw: document.getElementById('hSW'),
   }
   var W = window.innerWidth, H = window.innerHeight
-  cv.width = W; cv.height = H
   var MIN = 8
   var rect = null
   var mode = 'draw' // draw | adjust
@@ -80,7 +97,7 @@
   window.__screenshot.onData(function (dataUrl) {
     bg.onload = function () {
       window.__screenshot.loaded()
-      draw()
+      update()
       setTimeout(function () { hint.style.opacity = '0.9' }, 100)
     }
     bg.src = dataUrl
@@ -94,28 +111,29 @@
     return { x: x, y: y, w: w, h: h }
   }
 
-  // Canvas 一次性绘制遮罩 + 选区 + 尺寸（高性能）
-  function draw() {
-    cx.clearRect(0, 0, W, H)
-    cx.fillStyle = 'rgba(0,0,0,0.45)'
-    if (!rect) { cx.fillRect(0, 0, W, H); return }
-    cx.fillRect(0, 0, W, rect.y)
-    cx.fillRect(0, rect.y + rect.h, W, H - rect.y - rect.h)
-    cx.fillRect(0, rect.y, rect.x, rect.h)
-    cx.fillRect(rect.x + rect.w, rect.y, W - rect.x - rect.w, rect.h)
-    cx.strokeStyle = '#2563eb'
-    cx.lineWidth = 1.5
-    cx.strokeRect(rect.x + 0.75, rect.y + 0.75, rect.w, rect.h)
-    cx.fillStyle = '#2563eb'
-    cx.font = '12px sans-serif'
-    cx.fillText(Math.round(rect.w) + ' × ' + Math.round(rect.h), rect.x + 4, Math.max(14, rect.y - 6))
+  // 每帧只更新 2 个元素：mask 的 clip-path（GPU）+ sel 的位置尺寸
+  function update() {
+    if (!rect) {
+      mask.style.clipPath = 'polygon(0px 0px, 0px 0px, 0px 0px, 0px 0px, 0px 0px)'
+      sel.style.display = 'none'
+      hideHandles()
+      return
+    }
+    var x = rect.x, y = rect.y, w = rect.w, h = rect.h
+    // clip-path：外框逆时针 + 选区顺时针 → 挖洞
+    mask.style.clipPath =
+      'polygon(0px 0px, ' + W + 'px 0px, ' + W + 'px ' + H + 'px, 0px ' + H + 'px, 0px 0px, ' +
+      x + 'px ' + y + 'px, ' + (x + w) + 'px ' + y + 'px, ' + (x + w) + 'px ' + (y + h) + 'px, ' + x + 'px ' + (y + h) + 'px, ' + x + 'px ' + y + 'px)'
+    sel.style.display = 'block'
+    sel.style.transform = 'translate(' + x + 'px, ' + y + 'px)'
+    sel.style.width = w + 'px'
+    sel.style.height = h + 'px'
+    sz.textContent = Math.round(w) + ' × ' + Math.round(h)
+    updateHandles()
   }
 
   function updateHandles() {
-    if (mode !== 'adjust' || !rect) {
-      for (var k in handles) handles[k].style.display = 'none'
-      return
-    }
+    if (mode !== 'adjust' || !rect) { hideHandles(); return }
     var x = rect.x, y = rect.y, w = rect.w, h = rect.h
     var pos = {
       n: [x + w / 2, y], s: [x + w / 2, y + h],
@@ -129,13 +147,16 @@
     }
   }
 
-  function scheduleDraw() {
+  function hideHandles() {
+    for (var k in handles) handles[k].style.display = 'none'
+  }
+
+  function scheduleUpdate() {
     if (rafPending) return
     rafPending = true
     requestAnimationFrame(function () {
       rafPending = false
-      draw()
-      updateHandles()
+      update()
     })
   }
 
@@ -161,7 +182,7 @@
       toolbar.style.display = 'none'
       hint.style.opacity = '0.9'
       drag = { type: 'draw', x0: e.clientX, y0: e.clientY }
-      scheduleDraw()
+      scheduleUpdate()
     }
   })
 
@@ -182,7 +203,7 @@
       if (drag.dir.indexOf('n') !== -1) { r.y = o.y + dy; r.h = o.h - dy }
       rect = clampRect(r)
     }
-    scheduleDraw()
+    scheduleUpdate()
   })
 
   document.addEventListener('mouseup', function () {
@@ -195,11 +216,11 @@
       t.style.left = Math.min(rect.x + rect.w + 10, W - 250) + 'px'
       t.style.top = (rect.y + rect.h + 14 > H - 60 ? rect.y - 60 : rect.y + rect.h + 14) + 'px'
       hint.style.opacity = '0'
-      scheduleDraw() // 显示手柄
+      scheduleUpdate()
     }
   })
 
-  // 关键修复：点击工具栏（确定/取消）不触发 document 的画框逻辑
+  // 关键：点击工具栏（确定/取消）不触发 document 的画框逻辑
   toolbar.addEventListener('mousedown', function (e) { e.stopPropagation() })
 
   document.getElementById('okBtn').onclick = function () {
