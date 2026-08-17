@@ -19,7 +19,7 @@ Pure shell — it **does not modify dsh itself**. The server reuses your globall
 - 🗂️ **Session manager**: `Alt → File → Session Manager…` lists every session, delete with one click (permanently removes chat history)
 - 🪟 **Standalone window**: native desktop window loading the Harness Web UI
 - 🍱 **System tray**: closing the window minimizes to the tray; right-click to show or quit
-- 🔄 **Easy reload**: `F5` / `Ctrl+R` / floating button — load new plugins without restarting the window
+- 🔄 **Easy reload**: `F5` / `Ctrl+R` / floating button — reloads the Web UI; frontend plugins (skins, layout, enhancements) take effect on reload without restarting the app
 - 🧭 **Auto environment setup**: on first launch it detects Node.js / dsh and guides a one-click install — friendly to non-technical users
 - 🔧 **Configurable port**: `npm start -- --port 3081` when 3080 is taken
 - 🧠 **Smart reuse**: reuses an already-running dsh service instead of starting a duplicate
