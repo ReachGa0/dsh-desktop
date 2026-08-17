@@ -39,12 +39,15 @@ DeepSeek Harness 的 **Electron 桌面壳**：双击图标，一个独立窗口�
 
 ## 📸 选区截图提问
 
+![选区截图直接问 AI 演示](docs/demo/screenshot-ask.gif)
+
 1. 点右下角 **📸**（聊天窗口自动隐藏）
 2. 全屏遮罩上**拖动框选**区域（实时显示，画完可拖 8 个手柄微调）
 3. 点 **✔ 确定**（或双击 / 回车）→ 聊天窗口恢复
 4. 截图自动进入聊天框 → 输入问题 → AI 看图回答
 
 > 配合 [ModLens](https://www.npmjs.com/package/@liustack/modlens) 等识图插件，DeepSeek 文本模型也能看懂图片。
+> 截图同时自动保存到 `~/.dsh/screenshots/`（托盘右键可打开目录）。
 
 ## 前提
 

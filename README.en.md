@@ -37,12 +37,15 @@ Pure shell — it **does not modify dsh itself**. The server reuses your globall
 
 ## 📸 Region screenshot
 
+![Region screenshot to ask AI (demo)](docs/demo/screenshot-ask.gif)
+
 1. Click the **📸** button (bottom-right) — the chat window auto-hides
 2. **Drag to select** an area on the full-screen overlay (live preview; drag the 8 handles to fine-tune after drawing)
 3. Click **✔ OK** (or double-click / Enter) — the chat window restores
 4. The screenshot lands in the chat box automatically → type a question → the AI answers from the image
 
 > Pair with a vision bridge like [ModLens](https://www.npmjs.com/package/@liustack/modlens) so text-only DeepSeek models can read images too.
+> Screenshots are also saved to `~/.dsh/screenshots/` (open the folder from the tray menu).
 
 ## Prerequisites
 
