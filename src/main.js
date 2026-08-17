@@ -307,6 +307,58 @@ async function shutdownOwnedDsh() {
   }
 }
 
+/**
+ * 重启 dsh 服务：杀掉当前由本壳启动的 dsh → 重新拉起 → 等就绪 → 刷新页面。
+ * 供「重启 dsh 服务」菜单/托盘项使用（后端插件/服务改动后需要）。
+ */
+async function restartDshService() {
+  if (!ownedDsh) {
+    log('restart: no owned dsh to restart')
+    // 没有自管的 dsh（可能复用了外部服务）→ 无法安全重启，提示用户
+    dialog.showMessageBox(mainWindow || undefined, {
+      type: 'info',
+      title: '无法重启',
+      message: '当前使用的是外部已有的 dsh 服务，不是本应用启动的，无法从这里重启。',
+      detail: '请在外部终端手动重启该服务，然后刷新页面（F5）。',
+      buttons: ['好'],
+      noLink: true,
+    })
+    return
+  }
+  const port = resolvePort()
+  log(`restart: restarting dsh service on port ${port}…`)
+  // 先停（标记主动关停，避免触发崩溃自愈逻辑）
+  await shutdownOwnedDsh()
+  isShuttingDownDsh = false // 重置，让后续退出能触发自愈
+  // 重新启动
+  ownedDsh = startDsh(port)
+  const ready = await waitForServer(port, START_TIMEOUT_MS)
+  if (!ready) {
+    log('restart: dsh failed to come back')
+    dialog.showMessageBox(mainWindow || undefined, {
+      type: 'error',
+      title: '重启失败',
+      message: 'dsh 服务重启后未在预期时间内就绪。',
+      detail: `日志文件：${path.join(app.getPath('userData'), 'dsh.log')}`,
+      buttons: ['好'],
+      noLink: true,
+    })
+    return
+  }
+  log('restart: dsh back up; reloading window')
+  // 等页面也能加载后刷新
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(`http://127.0.0.1:${port}`)
+  }
+  dialog.showMessageBox(mainWindow || undefined, {
+    type: 'info',
+    title: 'dsh 服务已重启',
+    message: 'dsh 服务已重启完成，页面已刷新。',
+    buttons: ['好'],
+    noLink: true,
+  }).catch(() => {})
+}
+
 /* ------------------------------------------------------------------ *
  * 会话管理（读取/删除 ~/.dsh/sessions 下的会话）
  * ------------------------------------------------------------------ */
@@ -705,6 +757,10 @@ function createTray() {
           shell.openPath(dir)
         },
       },
+      {
+        label: '重启 dsh 服务',
+        click: () => { restartDshService() },
+      },
       { type: 'separator' },
       {
         label: '退出',
@@ -736,6 +792,10 @@ function createApplicationMenu() {
         {
           label: '会话管理…',
           click: () => openSessionsWindow(),
+        },
+        {
+          label: '重启 dsh 服务…',
+          click: () => restartDshService(),
         },
         { type: 'separator' },
         {
