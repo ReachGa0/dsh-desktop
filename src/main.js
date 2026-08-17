@@ -16,6 +16,7 @@
 const { app, BrowserWindow, dialog, shell, Tray, Menu, nativeImage, ipcMain, desktopCapturer, clipboard, screen } = require('electron')
 const { spawn, execFile } = require('node:child_process')
 const http = require('node:http')
+const https = require('node:https')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -63,6 +64,103 @@ function shotLog(...args) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 自动更新检查（启动时异步检测 GitHub Releases 最新版）
+ * ------------------------------------------------------------------ */
+
+const REPO = 'ReachGa0/dsh-desktop'
+const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases/latest`
+const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`
+const UPDATE_CHECK_TIMEOUT_MS = 10_000
+
+/** GET 一个 JSON（带超时与 UA，GitHub API 要求 UA）。resolve null 表示失败。 */
+function fetchJson(url) {
+  return new Promise((resolve) => {
+    // 首次用系统证书；代理/反代环境证书校验可能失败，降级为不校验重试一次
+    // （仅更新检查用，不降低应用其他部分的安全级别）
+    const attempt = (rejectUnauthorized) => {
+      const req = https.get(
+        url,
+        { headers: { 'User-Agent': 'dsh-desktop-update-check', Accept: 'application/vnd.github+json' }, timeout: UPDATE_CHECK_TIMEOUT_MS, rejectUnauthorized },
+        (res) => {
+          if (res.statusCode !== 200) {
+            res.resume()
+            resolve(null)
+            return
+          }
+          let body = ''
+          res.setEncoding('utf8')
+          res.on('data', (d) => (body += d))
+          res.on('end', () => {
+            try { resolve(JSON.parse(body)) } catch { resolve(null) }
+          })
+        }
+      )
+      req.on('timeout', () => req.destroy())
+      req.on('error', () => {
+        // 证书类错误：再试一次宽松模式；其他错误直接放弃
+        if (rejectUnauthorized) attempt(false)
+        else resolve(null)
+      })
+    }
+    attempt(true)
+  })
+}
+
+/** 解析语义化版本号 → [major, minor, patch]，失败返回 null。 */
+function parseVersion(v) {
+  if (typeof v !== 'string') return null
+  const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(v.trim())
+  if (!m) return null
+  return [Number(m[1]), Number(m[2]), Number(m[3])]
+}
+
+/** a 比 b 新？都解析失败时返回 false（宁可漏报不可误报）。 */
+function isNewer(a, b) {
+  const pa = parseVersion(a)
+  const pb = parseVersion(b)
+  if (!pa || !pb) return false
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] > pb[i]
+  }
+  return false
+}
+
+/**
+ * 检查更新：查询 GitHub Releases 最新版，若比当前版本新则弹窗提示。
+ * 全程静默失败（网络不通 / 解析失败 / 无新版都不打扰用户）。
+ */
+async function checkForUpdates() {
+  const current = app.getVersion()
+  try {
+    const release = await fetchJson(RELEASES_URL)
+    if (!release) {
+      log('update check: no release data (offline or API error)')
+      return
+    }
+    const latest = release.tag_name
+    log(`update check: current=${current} latest=${latest}`)
+    if (!isNewer(latest, current)) return
+    const name = release.name && release.name !== latest ? `「${release.name}」` : ''
+    const detail = (release.body || '').split('\n').slice(0, 6).join('\n').trim()
+    const { response } = await dialog.showMessageBox(mainWindow || undefined, {
+      type: 'info',
+      title: '发现新版本',
+      message: `DeepSeek Harness Desktop 有新版本可用（${latest} ${name}）`,
+      detail: detail ? `更新内容：\n${detail}\n\n当前版本：${current}` : `当前版本：${current}`,
+      buttons: ['前往下载', '以后再说'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    })
+    if (response === 0) {
+      shell.openExternal(RELEASES_PAGE)
+    }
+  } catch (e) {
+    log('update check failed:', e && e.message)
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * 工具：探测 / 等待 HTTP 服务
  * ------------------------------------------------------------------ */
 
@@ -105,6 +203,11 @@ function resolveDshBin() {
   return 'dsh.cmd'
 }
 
+// 主动关停 dsh 时的标记（杀进程也会触发 exit，需区分「主动关」和「意外崩」）
+let isShuttingDownDsh = false
+// 已自动重启过一次的标志（同一次会话最多自愈一次，避免崩溃循环）
+let didAutoRestartDsh = false
+
 /** 启动 dsh web，日志追加到 userData/dsh.log。返回子进程。 */
 function startDsh(port) {
   const bin = resolveDshBin()
@@ -122,12 +225,63 @@ function startDsh(port) {
   log(`dsh log: ${logFile}`)
   child.on('exit', (code, signal) => {
     log(`dsh exited: code=${code} signal=${signal}`)
-    if (ownedDsh === child) ownedDsh = null
+    if (ownedDsh !== child) return
+    ownedDsh = null
+    // 崩溃自愈：本壳启动的 dsh 意外退出（非主动关闭/非退出中）时自动重启一次
+    if (!isQuitting && !isShuttingDownDsh) {
+      restartOwnedDsh(port, code)
+    }
   })
   child.on('error', (err) => {
     log(`dsh spawn error: ${err.message}`)
   })
   return child
+}
+
+/** dsh 意外退出后自动重启一次；二次退出则提示用户并放弃。 */
+function restartOwnedDsh(port, exitCode) {
+  if (didAutoRestartDsh) {
+    log('dsh crashed again after auto-restart; giving up')
+    const logFile = path.join(app.getPath('userData'), 'dsh.log')
+    dialog.showMessageBox(mainWindow || undefined, {
+      type: 'error',
+      title: 'dsh 服务异常',
+      message: 'dsh 服务启动后再次退出，已停止自动重启。',
+      detail: `退出码：${exitCode ?? '未知'}\n\n日志文件：${logFile}\n\n请查看日志定位问题，或手动在终端运行 dsh web 排查。`,
+      buttons: ['打开日志目录', '知道了'],
+      noLink: true,
+    }).then(({ response }) => {
+      if (response === 0) shell.showItemInFolder(logFile)
+    })
+    return
+  }
+  log(`dsh exited unexpectedly (code=${exitCode}); restarting in 3s…`)
+  didAutoRestartDsh = true
+  setTimeout(() => {
+    if (isQuitting) return
+    // 重启前再确认端口没有被外部服务接管（避免重复启动）
+    probe(port).then((up) => {
+      if (up) {
+        log('port already serving after crash; not restarting')
+        return
+      }
+      const child = startDsh(port)
+      ownedDsh = child
+      // 等它就绪；若起不来则等 exit 回调里的二次提示
+      waitForServer(port, START_TIMEOUT_MS).then((ready) => {
+        if (ready) {
+          log('dsh auto-restarted successfully')
+          dialog.showMessageBox(mainWindow || undefined, {
+            type: 'info',
+            title: 'dsh 已自动重启',
+            message: 'dsh 服务意外退出，已自动恢复。',
+            buttons: ['好'],
+            noLink: true,
+          }).catch(() => {})
+        }
+      })
+    })
+  }, 3000)
 }
 
 /** 杀掉进程树（Windows 用 taskkill /T 覆盖子孙进程），带超时兜底。 */
@@ -147,6 +301,7 @@ async function shutdownOwnedDsh() {
   if (ownedDsh && ownedDsh.pid) {
     const pid = ownedDsh.pid
     ownedDsh = null
+    isShuttingDownDsh = true
     await killProcessTree(pid)
     log(`killed owned dsh pid ${pid}`)
   }
@@ -675,6 +830,8 @@ if (!gotLock) {
     createWindow(`http://127.0.0.1:${port}`)
     createTray()
     createApplicationMenu()
+    // 自动更新检查：不阻塞启动，静默失败
+    checkForUpdates()
     // preload 注入的悬浮刷新按钮 → 重新加载页面
     ipcMain.on('dsh-desktop:reload', () => {
       if (mainWindow) mainWindow.webContents.reload()
