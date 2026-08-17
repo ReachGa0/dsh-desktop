@@ -642,12 +642,15 @@ function onShotDone(rect) {
   }
   const cropped = image.crop(r)
   shotLog('shot: cropped', cropped.getSize().width + 'x' + cropped.getSize().height)
-  // 保存一份临时文件（验证/诊断用）
+  // 保存到 ~/.dsh/screenshots/（持久保存，方便回顾；同时写剪贴板）
   try {
-    fs.writeFileSync(path.join(os.tmpdir(), 'dsh-screenshot.png'), cropped.toPNG())
-    shotLog('shot: saved temp png')
+    const dir = path.join(os.homedir(), '.dsh', 'screenshots')
+    fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, `shot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`)
+    fs.writeFileSync(file, cropped.toPNG())
+    shotLog('shot: saved', file)
   } catch (e) {
-    shotLog('shot: temp save failed', String(e && e.message || e))
+    shotLog('shot: save failed', String(e && e.message || e))
   }
   clipboard.writeImage(cropped)
   shotLog('shot: written to clipboard')
@@ -693,6 +696,15 @@ function createTray() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示主窗口', click: showMainWindow },
+      { type: 'separator' },
+      {
+        label: '打开截图目录',
+        click: () => {
+          const dir = path.join(os.homedir(), '.dsh', 'screenshots')
+          fs.mkdirSync(dir, { recursive: true })
+          shell.openPath(dir)
+        },
+      },
       { type: 'separator' },
       {
         label: '退出',
