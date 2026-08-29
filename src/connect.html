@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>连接 DSH — DeepSeek Harness Desktop</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: #0d1117; color: #e6edf3;
+    font-family: system-ui, 'Microsoft YaHei', sans-serif;
+    user-select: none;
+  }
+  .card {
+    width: min(520px, calc(100vw - 48px));
+    padding: 36px 40px 30px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 14px;
+    text-align: center;
+  }
+  .logo { width: 64px; height: 64px; margin-bottom: 14px; opacity: 0.92; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 6px; }
+  .sub { font-size: 12.5px; color: #8b949e; margin: 0 0 20px; line-height: 1.6; }
+  button {
+    cursor: pointer; border-radius: 8px; font-size: 13px;
+    border: 1px solid #30363d; background: #21262d; color: #c9d1d9;
+    padding: 7px 14px; transition: background .15s, border-color .15s;
+  }
+  button:hover { background: #30363d; border-color: #8d96a0; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary {
+    background: #1f6feb; border-color: #1f6feb; color: #fff;
+    font-weight: 600; padding: 9px 26px; font-size: 14px;
+  }
+  button.primary:hover { background: #388bfd; }
+  #btn-local {
+    display: block; width: 100%;
+    padding: 13px 20px; font-size: 15px; margin-bottom: 18px;
+  }
+  .or {
+    display: flex; align-items: center; gap: 12px;
+    color: #484f58; font-size: 12px; margin-bottom: 14px;
+  }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: #30363d; }
+  input#addr {
+    width: 100%; padding: 10px 12px; font-size: 13.5px;
+    background: #0d1117; color: #e6edf3;
+    border: 1px solid #30363d; border-radius: 8px; outline: none;
+    user-select: text;
+  }
+  input#addr:focus { border-color: #1f6feb; box-shadow: 0 0 0 2px rgba(31,111,235,.25); }
+  .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .auto { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8b949e; margin-right: auto; cursor: pointer; }
+  .auto input { accent-color: #1f6feb; cursor: pointer; }
+  #status { min-height: 34px; margin-top: 14px; font-size: 12.5px; line-height: 1.55; white-space: pre-line; }
+  #status.err { color: #f85149; }
+  #status.ok { color: #3fb950; }
+  #status.muted { color: #8b949e; }
+  #hint { margin-top: 4px; font-size: 11.5px; color: #484f58; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="logo" src="../assets/whale-256.png" alt="">
+  <h1>连接到你的 DeepSeek Harness</h1>
+  <p class="sub">DSH 可以跑在本机，也可以跑在远程服务器（NAS / Docker / 内网主机）。<br>选择后会被记住，下次自动进入；随时可从托盘菜单切换。</p>
+
+  <button id="btn-local" class="primary">💻 本机连接（推荐）</button>
+
+  <div class="or">或连接远程服务器</div>
+
+  <input id="addr" spellcheck="false" autocomplete="off"
+         placeholder="例如 https://dsh.example.com 或 http://192.168.31.10:3080">
+
+  <div class="actions">
+    <label class="auto" id="auto-wrap"><input type="checkbox" id="auto">每 8 秒自动重试</label>
+    <button id="btn-cancel">返回应用</button>
+    <button id="btn-go" class="primary">连 接</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="hint"></div>
+</div>
+</body>
+</html>
