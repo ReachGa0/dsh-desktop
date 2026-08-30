@@ -214,7 +214,8 @@ function startDsh(port) {
   const logFile = path.join(app.getPath('userData'), 'dsh.log')
   const out = fs.openSync(logFile, 'a')
   // shell:true 时把参数拼进命令字符串（参数均为常量），避免 DEP0190 警告
-  const cmd = `"${bin}" web --port ${port}`
+  // --no-open 关闭 dsh 默认的自动打开浏览器行为（桌面壳自己用 BrowserWindow 加载，不弹浏览器）
+  const cmd = `"${bin}" web --port ${port} --no-open`
   const child = spawn(cmd, {
     shell: true,
     windowsHide: true,
